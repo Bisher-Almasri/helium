@@ -1,82 +1,19 @@
+//
+// Created by Bisher Almasri on 2025-06-10.
+//
+
 #include <iostream>
 #include <fstream>
 #include <sstream>
 #include <vector>
 #include <filesystem>
 
-enum class TokenType
-{
-    RETURN,
-    INT_LIT,
-    SEMI
-};
-
-struct Token
-{
-    TokenType type;
-    std::optional<std::string> value;
-};
+#include "tokenizer.hpp"
 
 // RETURNS VECTOR OF TOKENS
 std::vector<Token> tokenize(std::string &text)
 {
-    std::vector<Token> tokens = {};
 
-    std::string buf;
-    for (int i = 0; i < text.length(); )
-    {
-        char c = text.at(i);
-        if (std::isalpha(c))
-        {
-            buf.push_back(c);
-            i++;
-
-            while (i < text.length() && std::isalnum(text.at(i)))
-            {
-                buf.push_back(text.at(i));
-                i++;
-            }
-
-            if (buf == "return")
-            {
-                tokens.push_back({.type = TokenType::RETURN});
-                buf.clear();
-            } else
-            {
-                std::cerr << "Error: Unknown keyword '" << buf << "'" << std::endl;
-                exit(EXIT_FAILURE);
-            }
-        }
-        else if (std::isdigit(c))
-        {
-            buf.push_back(c);
-            i++;
-
-            while (i < text.length() && std::isdigit(text.at(i)))
-            {
-                buf.push_back(text.at(i));
-                i++;
-            }
-            tokens.push_back({.type = TokenType::INT_LIT, .value = buf});
-            buf.clear();
-        }
-        else if (c == ';')
-        {
-            tokens.push_back({.type = TokenType::SEMI});
-            i++;
-        }
-        else if (std::isspace(c))
-        {
-            i++;
-            continue;
-        } else
-        {
-            std::cerr << "Error: Unexpected character '" << c << "'" << std::endl;
-            exit(EXIT_FAILURE);
-        }
-    }
-
-    return tokens;
 }
 
 // TODO: ADD PARSER
@@ -89,7 +26,7 @@ std::string tokens_to_asm(std::vector<Token> &tokens)
     for (int i = 0; i < tokens.size(); ++i)
     {
         const Token &token = tokens.at(i);
-        if (token.type == TokenType::RETURN)
+        if (token.type == TokenType::EXIT)
         {
             if (i+1 < tokens.size() && tokens[i+1].type == TokenType::INT_LIT)
             {
