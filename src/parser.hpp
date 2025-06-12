@@ -118,14 +118,15 @@ class Parser
                  peek(2).has_value() && peek(2).value().type == TokenType::EQ)
         {
             consume();
-            NodeStmtLet stmt_let = NodeStmtLet{.ident = consume()};
+            auto stmt_let = NodeStmtLet{.ident = consume()};
+            consume();
             if (auto expr = parseExpression())
             {
                 stmt_let.expr = expr.value();
             }
             else
             {
-                std::cerr << "Error: Invalid Expression." << std::endl;
+                std::cerr << "Error: Invalid Expdression." << std::endl;
                 exit(EXIT_FAILURE);
             }
             if (peek().has_value() && peek().value().type == TokenType::SEMI)
@@ -154,7 +155,8 @@ class Parser
             if (auto stmt = parseStatement())
             {
                 prog.stmt.push_back(stmt.value());
-            } else
+            }
+            else
             {
                 std::cerr << "Error: Invalid Statement." << std::endl;
                 exit(EXIT_FAILURE);

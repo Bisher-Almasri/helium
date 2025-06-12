@@ -33,3 +33,5 @@ AllowShortFunctionsOnASingleLine: None
 EmptyLineBeforeAccessModifier: Always
 AllowShortIfStatementsOnASingleLine: false
 AllowShortLoopsOnASingleLine: false
+
+PointerAlignment: Left

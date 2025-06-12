@@ -12,7 +12,7 @@
 #include <sstream>
 #include <vector>
 
-int main(int argc, char *argv[])
+int main(int argc, char* argv[])
 {
     if (argc != 2)
     {
@@ -50,7 +50,6 @@ int main(int argc, char *argv[])
 
     Generator generator(tree.value());
 
-
     std::string asm_filename = base_filename + ".asm";
     {
         std::fstream file(asm_filename, std::ios::out);
@@ -63,7 +62,7 @@ int main(int argc, char *argv[])
     }
 
     std::string obj_filename = base_filename + ".o";
-    const std::string &exe_filename = base_filename;
+    const std::string& exe_filename = base_filename;
 
     std::string nasmcmd = "nasm -felf64 " + asm_filename + " -o " + obj_filename;
     std::string ldcmd = "ld " + obj_filename + " -o " + exe_filename;
