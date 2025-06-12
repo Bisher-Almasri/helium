@@ -1,0 +1,35 @@
+BasedOnStyle: LLVM
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+
+# Put { on a new line (Allman style)
+BreakBeforeBraces: Allman
+
+# Ensures spacing between functions, classes, etc.
+SeparateDefinitionBlocks: Always
+
+# Control spaces before and after keywords, parens, etc.
+SpacesBeforeTrailingComments: 1
+SpaceAfterCStyleCast: true
+SpaceBeforeParens: ControlStatements
+SpaceInEmptyParentheses: false
+SpaceBeforeAssignmentOperators: true
+
+
+# Improves readability by limiting line length
+ColumnLimit: 100
+
+# Forces a newline at the end of the file
+
+# Keeps includes tidy
+SortIncludes: true
+IncludeBlocks: Regroup
+
+# Improves spacing for function definitions
+AllowShortFunctionsOnASingleLine: None
+
+# Optional: enable this if you want a blank line between functions
+EmptyLineBeforeAccessModifier: Always
+AllowShortIfStatementsOnASingleLine: false
+AllowShortLoopsOnASingleLine: false

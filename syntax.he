@@ -1,0 +1,26 @@
+# standard comment
+use <std.io>
+use <math.utils>
+
+fn greet() = log("Hello")
+
+fn square(x: int) -> int = x * x
+
+fn compare(a: int, b: int) -> int {
+    if a == 0 || b == 0 || (a < b && a != 0) {
+        -> 0
+    }
+    -> a + b
+}
+
+fn idk(f: func<int>, v: int) -> void {
+    -> f(v)
+}
+
+let x = 3
+let y = 5
+let z = compare(x, y)
+
+let message: auto = "Done"
+
+log("z = {z}, message = {message}")
