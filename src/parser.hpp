@@ -160,6 +160,7 @@ class Parser
                 exit(EXIT_FAILURE);
             }
         }
+        return prog;
     }
 
   private:

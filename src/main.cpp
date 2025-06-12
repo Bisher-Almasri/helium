@@ -40,7 +40,7 @@ int main(int argc, char *argv[])
 
     std::vector<Token> tokens = tokenizer.tokenize();
     Parser parser(std::move(tokens));
-    std::optional<NodeExit> tree = parser.parse();
+    std::optional<NodeProg> tree = parser.parseProgram();
 
     if (!tree.has_value())
     {
@@ -59,7 +59,7 @@ int main(int argc, char *argv[])
             std::cerr << "Error: Could not create " << asm_filename << std::endl;
             return EXIT_FAILURE;
         }
-        file << generator.generate();
+        file << generator.genProgram();
     }
 
     std::string obj_filename = base_filename + ".o";
