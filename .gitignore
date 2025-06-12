@@ -3,3 +3,6 @@ main
 cmake-*/
 build/
 .idea/
+
+main.asm
+main.o

@@ -14,7 +14,12 @@ enum class TokenType
 {
     EXIT,
     INT_LIT,
-    SEMI
+    SEMI,
+    OPEN_PAREN,
+    CLOSE_PAREN,
+    IDENT,
+    LET,
+    EQ
 };
 
 struct Token
@@ -50,10 +55,15 @@ class Tokenizer
                     buf.clear();
                     // continue;
                 }
+                else if (buf == "let")
+                {
+                    tokens.push_back({.type = TokenType::LET});
+                    buf.clear();
+                }
                 else
                 {
-                    std::cerr << "Error: Unknown keyword '" << buf << "'" << std::endl;
-                    exit(EXIT_FAILURE);
+                    tokens.push_back({.type = TokenType::IDENT, .value = buf});
+                    buf.clear();
                 }
             }
             else if (std::isdigit(peek().value()))
@@ -66,6 +76,21 @@ class Tokenizer
                 tokens.push_back({.type = TokenType::INT_LIT, .value = buf});
                 buf.clear();
                 continue;
+            }
+            else if (peek().value() == '(')
+            {
+                consume();
+                tokens.push_back({.type = TokenType::OPEN_PAREN});
+            }
+            else if (peek().value() == ')')
+            {
+                consume();
+                tokens.push_back({.type = TokenType::CLOSE_PAREN});
+            }
+            else if (peek().value() == '=')
+            {
+                consume();
+                tokens.push_back({.type = TokenType::EQ});
             }
             else if (peek().value() == ';')
             {
@@ -90,14 +115,14 @@ class Tokenizer
     }
 
   private:
-    [[nodiscard]] inline std::optional<char> peek(int ahead = 1) const
+    [[nodiscard]] inline std::optional<char> peek(int offset = 0) const
     {
-        if (m_idx + ahead > m_src.length())
+        if (m_idx + offset >= m_src.length())
         {
             return {};
         }
         else
-            return m_src.at(m_idx);
+            return m_src.at(m_idx + offset);
     }
 
     inline char consume()

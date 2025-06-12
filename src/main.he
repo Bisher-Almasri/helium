@@ -1,1 +1,3 @@
-exit 12;
+let exitcode = 7;
+
+exit(0);

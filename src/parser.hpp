@@ -5,16 +5,47 @@
 
 #include "tokenization.hpp"
 
+#include <variant>
 #include <vector>
 
-struct NodeExpr
+struct NodeExprIntLit
 {
     Token int_lit;
 };
 
-struct NodeExit
+struct NodeExprIdent
+{
+    Token ident;
+};
+
+struct NodeExpr
+{
+    std::variant<NodeExprIntLit, NodeExprIdent> var;
+};
+
+// Node Statement Exit
+struct NodeStmtExit
 {
     NodeExpr expr;
+};
+
+// Node Statement Let
+struct NodeStmtLet
+{
+    Token ident;
+    NodeExpr expr;
+};
+
+// Node Statement
+struct NodeStmt
+{
+    std::variant<NodeStmtExit, NodeStmtLet> var;
+};
+
+// Node Program
+struct NodeProg
+{
+    std::vector<NodeStmt> stmt;
 };
 
 class Parser
@@ -24,11 +55,15 @@ class Parser
     {
     }
 
-    std::optional<NodeExpr> parseExpression()
+    [[nodiscard]] std::optional<NodeExpr> parseExpression()
     {
         if (peek().has_value() && peek().value().type == TokenType::INT_LIT)
         {
-            return NodeExpr{.int_lit = consume()};
+            return NodeExpr{.var = NodeExprIntLit{.int_lit = consume()}};
+        }
+        else if (peek().has_value() && peek().value().type == TokenType::IDENT)
+        {
+            return NodeExpr{.var = NodeExprIdent{.ident = consume()}};
         }
         else
         {
@@ -36,48 +71,107 @@ class Parser
         }
     };
 
-    std::optional<NodeExit> parse()
+    std::optional<NodeStmt> parseStatement()
     {
-        std::optional<NodeExit> exit_node;
-        while (peek().has_value())
+
+        if (peek().value().type == TokenType::EXIT && peek(1).value().type == TokenType::OPEN_PAREN)
         {
-            if (peek().value().type == TokenType::EXIT)
+            consume();
+            consume();
+            NodeStmtExit stmt_exit;
+            if (auto node_expr = parseExpression())
+            {
+                stmt_exit = NodeStmtExit{.expr = node_expr.value()};
+            }
+            else
+            {
+                std::cerr << "Error: Invalid Expression." << std::endl;
+                exit(EXIT_FAILURE);
+            }
+            if (peek().has_value() && peek().value().type == TokenType::CLOSE_PAREN)
             {
                 consume();
-                if (auto node_expr = parseExpression())
-                {
-                    exit_node = NodeExit{.expr = node_expr.value()};
-                }
-                else
-                {
-                    std::cerr << "Error: Invalid Expression." << std::endl;
-                    exit(EXIT_FAILURE);
-                }
-                if (peek().has_value() && peek().value().type == TokenType::SEMI)
-                {
-                    consume();
-                }
-                else
-                {
-                    std::cerr << "Error: Invalid Expression." << std::endl;
-                    exit(EXIT_FAILURE);
-                }
             }
+            else
+            {
+                std::cerr << "Error: Expected `;`" << std::endl;
+                exit(EXIT_FAILURE);
+            }
+            if (peek().has_value() && peek().value().type == TokenType::SEMI)
+            {
+                consume();
+            }
+            else
+            {
+                std::cerr << "Error: Expected ';'" << std::endl;
+                exit(EXIT_FAILURE);
+            }
+            return NodeStmt{.var = stmt_exit};
         }
-        m_idx = 0;
-        return exit_node;
+
+        /*
+         * let ident = (int_lit)
+         * TODO: more data types?
+         */
+        else if (peek().has_value() && peek().value().type == TokenType::LET &&
+                 peek(1).has_value() && peek(1).value().type == TokenType::IDENT &&
+                 peek(2).has_value() && peek(2).value().type == TokenType::EQ)
+        {
+            consume();
+            NodeStmtLet stmt_let = NodeStmtLet{.ident = consume()};
+            if (auto expr = parseExpression())
+            {
+                stmt_let.expr = expr.value();
+            }
+            else
+            {
+                std::cerr << "Error: Invalid Expression." << std::endl;
+                exit(EXIT_FAILURE);
+            }
+            if (peek().has_value() && peek().value().type == TokenType::SEMI)
+            {
+                consume();
+            }
+            else
+            {
+                std::cerr << "Error: Expected ';'" << std::endl;
+                exit(EXIT_FAILURE);
+            }
+
+            return NodeStmt{.var = stmt_let};
+        }
+        else
+        {
+            return {};
+        }
     };
 
-  private:
-    [[nodiscard]] inline std::optional<Token> peek(int ahead = 1) const
+    std::optional<NodeProg> parseProgram()
     {
-        if (m_idx + ahead > m_tokens.size())
+        NodeProg prog;
+        while (peek().has_value())
+        {
+            if (auto stmt = parseStatement())
+            {
+                prog.stmt.push_back(stmt.value());
+            } else
+            {
+                std::cerr << "Error: Invalid Statement." << std::endl;
+                exit(EXIT_FAILURE);
+            }
+        }
+    }
+
+  private:
+    [[nodiscard]] inline std::optional<Token> peek(int offset = 0) const
+    {
+        if (m_idx + offset >= m_tokens.size())
         {
             return {};
         }
         else
         {
-            return m_tokens.at(m_idx);
+            return m_tokens.at(m_idx + offset);
         }
     }
 
