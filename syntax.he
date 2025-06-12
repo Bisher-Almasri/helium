@@ -1,4 +1,7 @@
 # standard comment
+
+# THIS IS HOW I WANT THE SYNTAX TO LOOK
+
 use <std.io>
 use <math.utils>
 
