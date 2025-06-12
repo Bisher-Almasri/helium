@@ -35,12 +35,12 @@ class Tokenizer
         std::vector<Token> tokens;
 
         std::string buf;
-        while (peak().has_value())
+        while (peek().has_value())
         {
-            if (std::isalpha(peak().value()))
+            if (std::isalpha(peek().value()))
             {
                 buf.push_back(consume());
-                while (peak().has_value() && std::isalnum(peak().value()))
+                while (peek().has_value() && std::isalnum(peek().value()))
                 {
                     buf.push_back(consume());
                 }
@@ -56,10 +56,10 @@ class Tokenizer
                     exit(EXIT_FAILURE);
                 }
             }
-            else if (std::isdigit(peak().value()))
+            else if (std::isdigit(peek().value()))
             {
                 buf.push_back(consume());
-                while (peak().has_value() && std::isdigit(peak().value()))
+                while (peek().has_value() && std::isdigit(peek().value()))
                 {
                     buf.push_back(consume());
                 }
@@ -67,20 +67,20 @@ class Tokenizer
                 buf.clear();
                 continue;
             }
-            else if (peak().value() == ';')
+            else if (peek().value() == ';')
             {
                 consume();
                 tokens.push_back({.type = TokenType::SEMI});
                 continue;
             }
-            else if (std::isspace(peak().value()))
+            else if (std::isspace(peek().value()))
             {
                 consume();
                 continue;
             }
             else
             {
-                std::cerr << "Error: Unexpected token '" << peak().value() << "'" << std::endl;
+                std::cerr << "Error: Unexpected token '" << peek().value() << "'" << std::endl;
                 exit(EXIT_FAILURE);
             }
         }
@@ -90,7 +90,7 @@ class Tokenizer
     }
 
   private:
-    [[nodiscard]] inline std::optional<char> peak(int ahead = 1) const
+    [[nodiscard]] inline std::optional<char> peek(int ahead = 1) const
     {
         if (m_idx + ahead > m_src.length())
         {

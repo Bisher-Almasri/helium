@@ -26,7 +26,7 @@ class Parser
 
     std::optional<NodeExpr> parseExpression()
     {
-        if (peak().has_value() && peak().value().type == TokenType::INT_LIT)
+        if (peek().has_value() && peek().value().type == TokenType::INT_LIT)
         {
             return NodeExpr{.int_lit = consume()};
         }
@@ -39,9 +39,9 @@ class Parser
     std::optional<NodeExit> parse()
     {
         std::optional<NodeExit> exit_node;
-        while (peak().has_value())
+        while (peek().has_value())
         {
-            if (peak().value().type == TokenType::EXIT)
+            if (peek().value().type == TokenType::EXIT)
             {
                 consume();
                 if (auto node_expr = parseExpression())
@@ -53,7 +53,7 @@ class Parser
                     std::cerr << "Error: Invalid Expression." << std::endl;
                     exit(EXIT_FAILURE);
                 }
-                if (peak().has_value() && peak().value().type == TokenType::SEMI)
+                if (peek().has_value() && peek().value().type == TokenType::SEMI)
                 {
                     consume();
                 }
@@ -69,7 +69,7 @@ class Parser
     };
 
   private:
-    [[nodiscard]] inline std::optional<Token> peak(int ahead = 1) const
+    [[nodiscard]] inline std::optional<Token> peek(int ahead = 1) const
     {
         if (m_idx + ahead > m_tokens.size())
         {
