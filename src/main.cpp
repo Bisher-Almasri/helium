@@ -58,7 +58,7 @@ int main(int argc, char* argv[])
             std::cerr << "Error: Could not create " << asm_filename << std::endl;
             return EXIT_FAILURE;
         }
-        file << generator.genProgram();
+        file << generator.genProgram() ;
     }
 
     std::string obj_filename = base_filename + ".o";

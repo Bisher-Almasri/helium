@@ -19,7 +19,9 @@ enum class TokenType
     CLOSE_PAREN,
     IDENT,
     LET,
-    EQ
+    EQ,
+    PLUS,
+    MULT
 };
 
 struct Token
@@ -91,6 +93,16 @@ class Tokenizer
             {
                 consume();
                 tokens.push_back({.type = TokenType::EQ});
+            }
+            else if (peek().value() == '+')
+            {
+                consume();
+                tokens.push_back({.type = TokenType::PLUS});
+            }
+            else if (peek().value() == '*')
+            {
+                consume();
+                tokens.push_back({.type = TokenType::MULT});
             }
             else if (peek().value() == ';')
             {
