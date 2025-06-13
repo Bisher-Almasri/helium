@@ -21,3 +21,6 @@ _start:
     mov rax, 60
     pop rdi
     syscall
+    mov rax, 60
+    mov rdi, 0
+    syscall
