@@ -10,12 +10,12 @@
 #include <variant>
 #include <vector>
 
-struct NodeExprIntLit
+struct NodeTermIntLit
 {
     Token int_lit;
 };
 
-struct NodeExprIdent
+struct NodeTermIdent
 {
     Token ident;
 };
@@ -36,12 +36,18 @@ struct NodeBinExprMult
 
 struct NodeBinExpr
 {
-    std::variant<NodeBinExprAdd*, NodeBinExprMult*> var;
+    // std::variant<NodeBinExprAdd*, NodeBinExprMult*> var;
+    NodeBinExprAdd* var;
+};
+
+struct NodeTerm
+{
+    std::variant<NodeTermIntLit*, NodeTermIdent*> var;
 };
 
 struct NodeExpr
 {
-    std::variant<NodeExprIntLit*, NodeExprIdent*, NodeBinExpr*> var;
+    std::variant<NodeTerm*, NodeBinExpr*> var;
 };
 
 // Node Statement Exit
@@ -77,36 +83,25 @@ class Parser
     {
     }
 
-    std::optional<NodeBinExpr*> parseBinExpr()
+    std::optional<NodeTerm*> parseTerm()
     {
-        if (auto const lhs = parseExpression())
+        if (peek().has_value() && peek().value().type == TokenType::INT_LIT)
         {
-            auto bin_expr = m_allocator.alloc<NodeBinExpr>();
-            if (peek().has_value() && peek().value().type == TokenType::PLUS)
-            {
-                // plus
-                auto const bin_expr_add = m_allocator.alloc<NodeBinExprAdd>();
+            auto term_int_lit = m_allocator.alloc<NodeTermIntLit>();
+            term_int_lit->int_lit = consume();
 
-                bin_expr_add->lhs = lhs.value();
-                consume();
+            auto term = m_allocator.alloc<NodeTerm>();
+            term->var = term_int_lit;
+            return term;
+        }
+        else if (peek().has_value() && peek().value().type == TokenType::IDENT)
+        {
+            auto term_ident = m_allocator.alloc<NodeTermIdent>();
+            term_ident->ident = consume();
 
-                if (const auto rhs = parseExpression())
-                {
-                    bin_expr_add->rhs = rhs.value();
-                }
-                else
-                {
-                    std::cerr << "Error: Unsupported binary operator\n";
-                    exit(EXIT_FAILURE);
-                }
-            }
-            else
-            {
-                std::cerr << "Error: Unsupported binary operator\n";
-                exit(EXIT_FAILURE);
-            }
-
-            return bin_expr;
+            auto term = m_allocator.alloc<NodeTerm>();
+            term->var = term_ident;
+            return term;
         }
         else
         {
@@ -115,36 +110,51 @@ class Parser
     }
 
     [[nodiscard]] std::optional<NodeExpr*> parseExpression()
+
     {
-        if (peek().has_value() && peek().value().type == TokenType::INT_LIT)
+        if (auto term = parseTerm())
         {
-            auto node_expr_int_lit = m_allocator.alloc<NodeExprIntLit>();
-            node_expr_int_lit->int_lit = consume();
+            if (peek().has_value() && peek().value().type == TokenType::PLUS)
+            {
+                auto bin_expr = m_allocator.alloc<NodeBinExpr>();
+                if (peek().has_value() && peek().value().type == TokenType::PLUS)
+                {
+                    // plus
+                    auto const bin_expr_add = m_allocator.alloc<NodeBinExprAdd>();
 
-            auto expr = m_allocator.alloc<NodeExpr>();
-            expr->var = node_expr_int_lit;
-            return expr;
-        }
-        else if (peek().has_value() && peek().value().type == TokenType::IDENT)
-        {
-            auto node_expr_ident = m_allocator.alloc<NodeExprIdent>();
-            node_expr_ident->ident = consume();
+                    const auto lhs = m_allocator.alloc<NodeExpr>();
+                    lhs->var = term.value();
+                    bin_expr_add->lhs = lhs;
+                    consume();
 
-            auto expr = m_allocator.alloc<NodeExpr>();
-            expr->var = node_expr_ident;
-            return expr;
-        }
-        else if (auto bin_expr = parseBinExpr())
-        {
-            auto expr = m_allocator.alloc<NodeExpr>();
-            expr->var = bin_expr.value();
-            return expr;
+                    if (const auto rhs = parseExpression())
+                    {
+                        bin_expr_add->rhs = rhs.value();
+                        bin_expr->var = bin_expr_add;
+                        auto expr = m_allocator.alloc<NodeExpr>();
+                        expr->var = bin_expr;
+                        return expr;
+                    }
+                    else
+                    {
+                        std::cerr << "Error: Unsupported binary operator\n";
+                        exit(EXIT_FAILURE);
+                    }
+                }
+            }
+            else
+            {
+                auto expr = m_allocator.alloc<NodeExpr>();
+                expr->var = term.value();
+                return expr;
+            }
         }
         else
         {
             return {};
         }
-    };
+        return {};
+    }
 
     std::optional<NodeStmt*> parseStatement()
     {

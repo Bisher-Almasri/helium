@@ -5,9 +5,12 @@
 #pragma once
 #include "parser.hpp"
 
-#include <assert.h>
 #include <sstream>
 #include <unordered_map>
+
+
+// YOU SHOULD NOT USE MY CODE FOR REFERENCE, I HAVE NO IDEA WHAT IM DOING
+// I'M LEARNING ASM WHILE DOING THIS, USING MY CODE IS EQUIVALENT TO DE OPTIMIZATION
 
 class Generator
 {
@@ -16,37 +19,60 @@ class Generator
     {
     }
 
-    // HANDLE EXPERISSION
+    void genTerm(const NodeTerm* term)
+    {
+        struct TermVisitor
+        {
+            Generator* gen;
+            void operator()(const NodeTermIntLit* term_int_lit) const
+            {
+                // MOVES TO STACK
+                gen->mov("rax", term_int_lit->int_lit.value.value());
+                gen->push("rax");
+            }
+            void operator()(const NodeTermIdent* term_ident) const
+            {
+                if (!gen->m_vars.contains(term_ident->ident.value.value()))
+                {
+                    std::cerr << "Error: Undeclared Identifier.\n";
+                    exit(EXIT_FAILURE);
+                }
+
+                const auto& [stack_loc] = gen->m_vars.at(term_ident->ident.value.value());
+                std::stringstream offset;
+                offset << "QWORD [rsp + " << (gen->m_stack_size - stack_loc - 1) * 8 << "]\n";
+                gen->push(offset.str());
+            }
+        };
+
+        TermVisitor visitor {.gen = this};
+        std::visit(visitor, term->var);
+    }
+
+    // HANDLE EXPRESSION
     void genExpression(const NodeExpr* expr)
     {
         struct ExprVisitor
         {
             Generator* gen;
 
-            void operator()(const NodeExprIntLit* expr_int_lit) const
+            void operator()(const NodeTerm* term) const
             {
-                // MOVES TO STACK
-                gen->mov("rax", expr_int_lit->int_lit.value.value());
-                gen->push("rax");
-            }
-
-            void operator()(const NodeExprIdent* expr_ident) const
-            {
-                if (!gen->m_vars.contains(expr_ident->ident.value.value()))
-                {
-                    std::cerr << "Error: Undeclared Identifier.\n";
-                    exit(EXIT_FAILURE);
-                }
-
-                const auto& [stack_loc] = gen->m_vars.at(expr_ident->ident.value.value());
-                std::stringstream offset;
-                offset << "QWORD [rsp + " << (gen->m_stack_size - stack_loc - 1) * 8 << "]\n";
-                gen->push(offset.str());
+                gen->genTerm(term);
             }
 
             void operator()(const NodeBinExpr* bin_expr) const
             {
-                assert(false); // not implemented
+                gen->genExpression(bin_expr->var->lhs);
+                gen->genExpression(bin_expr->var->rhs);
+                // both are pushed to the stack of RAX register
+                // add requires ax (where res will be restored, and another reg for add
+                gen->pop("rax");
+                gen->pop("rbx");
+                gen->m_output << "    add rax, rbx\n";
+                // push it to the stack so we can use it
+                gen->push("rax");
+
             }
         };
 
