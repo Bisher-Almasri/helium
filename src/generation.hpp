@@ -8,7 +8,6 @@
 #include <sstream>
 #include <unordered_map>
 
-
 // YOU SHOULD NOT USE MY CODE FOR REFERENCE, I HAVE NO IDEA WHAT IM DOING
 // I'M LEARNING ASM WHILE DOING THIS, USING MY CODE IS EQUIVALENT TO DE OPTIMIZATION
 
@@ -24,12 +23,14 @@ class Generator
         struct TermVisitor
         {
             Generator* gen;
+
             void operator()(const NodeTermIntLit* term_int_lit) const
             {
                 // MOVES TO STACK
                 gen->mov("rax", term_int_lit->int_lit.value.value());
                 gen->push("rax");
             }
+
             void operator()(const NodeTermIdent* term_ident) const
             {
                 if (!gen->m_vars.contains(term_ident->ident.value.value()))
@@ -43,10 +44,77 @@ class Generator
                 offset << "QWORD [rsp + " << (gen->m_stack_size - stack_loc - 1) * 8 << "]\n";
                 gen->push(offset.str());
             }
+
+            void operator()(const NodeTermParen* term_paren) const
+            {
+                gen->genExpression(term_paren->expr);
+            }
         };
 
-        TermVisitor visitor {.gen = this};
+        TermVisitor visitor{.gen = this};
         std::visit(visitor, term->var);
+    }
+
+    void genBinExpr(const NodeBinExpr* bin_expr)
+    {
+        struct BinExprVisitor
+        {
+            Generator* gen;
+
+            void operator()(const NodeBinExprAdd* bin_expr_add) const
+            {
+                gen->genExpression(bin_expr_add->rhs);
+                gen->genExpression(bin_expr_add->lhs);
+                // both are pushed to the stack
+                // add requires ax (where result will be restored, and another reg for add
+                gen->pop("rax");
+                gen->pop("rbx");
+                gen->m_output << "    add rax, rbx\n";
+                // push it to the stack so we can use it
+                gen->push("rax");
+            }
+            void operator()(const NodeBinExprMult* bin_expr_mult) const
+            {
+                gen->genExpression(bin_expr_mult->rhs);
+                gen->genExpression(bin_expr_mult->lhs);
+                // both are pushed to the stack
+                // add requires ax (where result will be restored, and another reg for add
+                gen->pop("rax");
+                gen->pop("rbx");
+                // reason only rbx is it stores val into rax, so passing rac would be futile and result in an error
+                gen->m_output << "    mul rbx\n";
+                // push it to the stack so we can use it
+                gen->push("rax");
+            }
+            void operator()(const NodeBinExprSub* bin_expr_sub) const
+            {
+                gen->genExpression(bin_expr_sub->rhs);
+                gen->genExpression(bin_expr_sub->lhs);
+                // both are pushed to the stack
+                // add requires ax (where result will be restored, and another reg for add
+                gen->pop("rax");
+                gen->pop("rbx");
+                gen->m_output << "    sub rax, rbx\n";
+                // push it to the stack so we can use it
+                gen->push("rax");
+            }
+            void operator()(const NodeBinExprDiv* bin_expr_div) const
+            {
+                gen->genExpression(bin_expr_div->rhs);
+                gen->genExpression(bin_expr_div->lhs);
+                // both are pushed to the stack
+                // add requires ax (where result will be restored, and another reg for add
+                gen->pop("rax");
+                gen->pop("rbx");
+                // reason only rbx is it stores val into rax, so passing rac would be futile and result in an error
+                gen->m_output << "    div rbx\n";
+                // push it to the stack so we can use it
+                gen->push("rax");
+            }
+        };
+
+        BinExprVisitor visitor{.gen = this};
+        std::visit(visitor, bin_expr->var);
     }
 
     // HANDLE EXPRESSION
@@ -63,16 +131,7 @@ class Generator
 
             void operator()(const NodeBinExpr* bin_expr) const
             {
-                gen->genExpression(bin_expr->var->lhs);
-                gen->genExpression(bin_expr->var->rhs);
-                // both are pushed to the stack of RAX register
-                // add requires ax (where res will be restored, and another reg for add
-                gen->pop("rax");
-                gen->pop("rbx");
-                gen->m_output << "    add rax, rbx\n";
-                // push it to the stack so we can use it
-                gen->push("rax");
-
+                gen->genBinExpr(bin_expr);
             }
         };
 
@@ -142,7 +201,9 @@ class Generator
     void mov(const std::string& reg, const std::string& val)
     {
         // OMFG AFTER DEBUGGING FOR 20 MINUTES
-        // I FORGOT A COMMA I HATE ASM I HATE ASM I HATE ASM I HATE ASM I HATE ASM I HATE ASM I HATE ASM I HATE ASM I HATE ASM I HATE ASM I HATE ASM I HATE ASM I HATE ASM I HATE ASM I HATE ASM I HATE ASM I HATE ASM I HATE ASM I HATE ASM
+        // I FORGOT A COMMA I HATE ASM I HATE ASM I HATE ASM I HATE ASM I HATE ASM I HATE ASM I HATE
+        // ASM I HATE ASM I HATE ASM I HATE ASM I HATE ASM I HATE ASM I HATE ASM I HATE ASM I HATE
+        // ASM I HATE ASM I HATE ASM I HATE ASM I HATE ASM
         m_output << "    mov " << reg << ", " << val << '\n';
         //                                ^ MY OPP RIGHT HERE
     }

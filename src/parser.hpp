@@ -6,6 +6,7 @@
 #include "arena.hpp"
 #include "tokenization.hpp"
 
+#include <assert.h>
 #include <memory>
 #include <variant>
 #include <vector>
@@ -19,8 +20,12 @@ struct NodeTermIdent
 {
     Token ident;
 };
-
 struct NodeExpr;
+
+struct NodeTermParen
+{
+    NodeExpr* expr;
+};
 
 struct NodeBinExprAdd
 {
@@ -34,15 +39,27 @@ struct NodeBinExprMult
     NodeExpr* lhs;
 };
 
+struct NodeBinExprSub
+{
+    NodeExpr* rhs;
+    NodeExpr* lhs;
+};
+
+struct NodeBinExprDiv
+{
+    NodeExpr* rhs;
+    NodeExpr* lhs;
+};
+
 struct NodeBinExpr
 {
-    // std::variant<NodeBinExprAdd*, NodeBinExprMult*> var;
-    NodeBinExprAdd* var;
+    std::variant<NodeBinExprAdd*, NodeBinExprMult*, NodeBinExprSub*, NodeBinExprDiv*> var;
+    // NodeBinExprAdd* var;
 };
 
 struct NodeTerm
 {
-    std::variant<NodeTermIntLit*, NodeTermIdent*> var;
+    std::variant<NodeTermIntLit*, NodeTermIdent*, NodeTermParen*> var;
 };
 
 struct NodeExpr
@@ -60,7 +77,7 @@ struct NodeStmtExit
 struct NodeStmtLet
 {
     Token ident;
-    NodeExpr* expr;
+    NodeExpr* expr{};
 };
 
 // Node Statement
@@ -103,52 +120,108 @@ class Parser
             term->var = term_ident;
             return term;
         }
+        else if (auto open_paren = tryConsume(TokenType::OPEN_PAREN))
+        {
+            const auto expr = parseExpression();
+            if (!expr.has_value())
+            {
+                std::cout << "Error: Invalid Expression.";
+                exit(EXIT_FAILURE);
+            }
+            tryConsume(TokenType::CLOSE_PAREN, "Error: Expected `)`");
+            auto term_paren = m_allocator.alloc<NodeTermParen>();
+            term_paren->expr = expr.value();
+
+            auto term = m_allocator.alloc<NodeTerm>();
+            term->var = term_paren;
+            return term;
+        }
         else
         {
             return {};
         }
     }
 
-    [[nodiscard]] std::optional<NodeExpr*> parseExpression()
+    [[nodiscard]] std::optional<NodeExpr*> parseExpression(const int min_prec = 0)
 
     {
-        if (auto term = parseTerm())
+
+        const std::optional<NodeTerm*> term_lhs = parseTerm();
+        if (!term_lhs.has_value())
+            return {};
+
+        const auto expr_lhs = m_allocator.alloc<NodeExpr>();
+        expr_lhs->var = term_lhs.value();
+
+        while (true)
         {
-            if (tryConsume(TokenType::PLUS).has_value())
+            std::optional<Token> curr_tok = peek();
+            std::optional<int> prec;
+            if (curr_tok.has_value())
             {
-                auto bin_expr = m_allocator.alloc<NodeBinExpr>();
-                auto const bin_expr_add = m_allocator.alloc<NodeBinExprAdd>();
-
-                const auto lhs = m_allocator.alloc<NodeExpr>();
-                lhs->var = term.value();
-                bin_expr_add->lhs = lhs;
-
-                if (const auto rhs = parseExpression())
+                prec = BinPrec(curr_tok->type);
+                if (!prec.has_value() || prec < min_prec)
                 {
-                    bin_expr_add->rhs = rhs.value();
-                    bin_expr->var = bin_expr_add;
-                    auto expr = m_allocator.alloc<NodeExpr>();
-                    expr->var = bin_expr;
-                    return expr;
-                }
-                else
-                {
-                    std::cerr << "Error: Unsupported binary operator\n";
-                    exit(EXIT_FAILURE);
+                    break;
                 }
             }
             else
             {
-                auto expr = m_allocator.alloc<NodeExpr>();
-                expr->var = term.value();
-                return expr;
+                break;
             }
+
+            auto [op_type, op_value] = consume();
+            const int next_min_prec = prec.value() + 1;
+            auto expr_rhs = parseExpression(next_min_prec);
+            if (!expr_rhs.has_value())
+            {
+                std::cerr << "Error: Unable to parse expression.\n";
+                exit(EXIT_FAILURE);
+            }
+
+            const auto expr = m_allocator.alloc<NodeBinExpr>();
+            const auto expr_lhs2 = m_allocator.alloc<NodeExpr>();
+
+            if (op_type == TokenType::ADD)
+            {
+                auto add = m_allocator.alloc<NodeBinExprAdd>();
+                expr_lhs2->var = expr_lhs->var;
+                add->lhs = expr_lhs2;
+                add->rhs = expr_rhs.value();
+                expr->var = add;
+            }
+            else if (op_type == TokenType::MULT)
+            {
+                auto mult = m_allocator.alloc<NodeBinExprMult>();
+                expr_lhs2->var = expr_lhs->var;
+                mult->lhs = expr_lhs2;
+                mult->rhs = expr_rhs.value();
+                expr->var = mult;
+            }
+            else if (op_type == TokenType::SUB)
+            {
+                auto sub = m_allocator.alloc<NodeBinExprSub>();
+                expr_lhs2->var = expr_lhs->var;
+                sub->lhs = expr_lhs2;
+                sub->rhs = expr_rhs.value();
+                expr->var = sub;
+            }
+            else if (op_type == TokenType::DIV)
+            {
+                auto div = m_allocator.alloc<NodeBinExprDiv>();
+                expr_lhs2->var = expr_lhs->var;
+                div->lhs = expr_lhs2;
+                div->rhs = expr_rhs.value();
+                expr->var = div;
+            }
+            else
+            {
+                assert(false);
+            }
+
+            expr_lhs->var = expr;
         }
-        else
-        {
-            return {};
-        }
-        return {};
+        return expr_lhs;
     }
 
     std::optional<NodeStmt*> parseStatement()
@@ -231,7 +304,7 @@ class Parser
     }
 
   private:
-    [[nodiscard]] inline std::optional<Token> peek(int offset = 0) const
+    [[nodiscard]] inline std::optional<Token> peek(const int offset = 0) const
     {
         if (m_idx + offset >= m_tokens.size())
         {

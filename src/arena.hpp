@@ -14,15 +14,13 @@ class ArenaAllocator
         m_offset = m_buffer;
     }
 
-
     /**
-         * This was a bit confusing, so I'll add this comment explaining it.
-         * We create a temp var called offset that we will return.
-         * Reason is so we can return the current location it is and increment the m_offset with the
-         * new size
-         */
-    template<typename T>
-    inline T* alloc()
+     * This was a bit confusing, so I'll add this comment explaining it.
+     * We create a temp var called offset that we will return.
+     * Reason is so we can return the current location it is and increment the m_offset with the
+     * new size
+     */
+    template <typename T> inline T* alloc()
     {
         void* offset = m_offset;
         m_offset += sizeof(T);

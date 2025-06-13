@@ -20,14 +20,31 @@ enum class TokenType
     IDENT,
     LET,
     EQ,
-    PLUS,
-    MULT
+    ADD,
+    MULT,
+    SUB,
+    DIV
 };
+
+inline std::optional<int> BinPrec(const TokenType type)
+{
+    switch (type)
+    {
+    case TokenType::ADD:
+    case TokenType::SUB:
+        return 1;
+    case TokenType::MULT:
+    case TokenType::DIV:
+        return 2;
+    default:
+        return {};
+    }
+}
 
 struct Token
 {
     TokenType type;
-    std::optional<std::string> value;
+    std::optional<std::string> value {};
 };
 
 class Tokenizer
@@ -44,6 +61,7 @@ class Tokenizer
         std::string buf;
         while (peek().has_value())
         {
+            char c = peek().value();
             if (std::isalpha(peek().value()))
             {
                 buf.push_back(consume());
@@ -77,48 +95,32 @@ class Tokenizer
                 }
                 tokens.push_back({.type = TokenType::INT_LIT, .value = buf});
                 buf.clear();
-                continue;
-            }
-            else if (peek().value() == '(')
-            {
-                consume();
-                tokens.push_back({.type = TokenType::OPEN_PAREN});
-            }
-            else if (peek().value() == ')')
-            {
-                consume();
-                tokens.push_back({.type = TokenType::CLOSE_PAREN});
-            }
-            else if (peek().value() == '=')
-            {
-                consume();
-                tokens.push_back({.type = TokenType::EQ});
-            }
-            else if (peek().value() == '+')
-            {
-                consume();
-                tokens.push_back({.type = TokenType::PLUS});
-            }
-            else if (peek().value() == '*')
-            {
-                consume();
-                tokens.push_back({.type = TokenType::MULT});
-            }
-            else if (peek().value() == ';')
-            {
-                consume();
-                tokens.push_back({.type = TokenType::SEMI});
-                continue;
             }
             else if (std::isspace(peek().value()))
             {
                 consume();
-                continue;
             }
             else
             {
-                std::cerr << "Error: Unexpected token '" << peek().value() << "'" << std::endl;
-                exit(EXIT_FAILURE);
+                TokenType type;
+
+                consume();
+
+                switch (c)
+                {
+                    case '(': type = TokenType::OPEN_PAREN; break;
+                    case ')': type = TokenType::CLOSE_PAREN; break;
+                    case '=': type = TokenType::EQ; break;
+                    case '+': type = TokenType::ADD; break;
+                    case '*': type = TokenType::MULT; break;
+                    case '/': type = TokenType::DIV; break;
+                    case '-': type = TokenType::SUB; break;
+                    case ';': type = TokenType::SEMI; break;
+                    default:
+                    std::cerr << "Error: Unexpected token '" << c << "'" << std::endl;
+                    exit(EXIT_FAILURE);
+                }
+                tokens.push_back({.type = type});
             }
         }
 
@@ -141,7 +143,6 @@ class Tokenizer
     {
         return m_src.at(m_idx++);
     }
-
 
     const std::string m_src;
     int m_idx = 0;

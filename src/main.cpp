@@ -58,31 +58,29 @@ int main(int argc, char* argv[])
             std::cerr << "Error: Could not create " << asm_filename << std::endl;
             return EXIT_FAILURE;
         }
-        file << generator.genProgram() ;
+        file << generator.genProgram();
     }
 
     std::string obj_filename = base_filename + ".o";
     const std::string& exe_filename = base_filename;
 
-    std::string nasmcmd = "nasm -felf64 " + asm_filename + " -o " + obj_filename;
-    std::string ldcmd = "ld " + obj_filename + " -o " + exe_filename;
-    std::string rmcmd = "rm -f " + obj_filename + " " + asm_filename;
-    std::cout << "Executing: " << nasmcmd << std::endl;
-    int nasm_result = system(nasmcmd.c_str());
-    if (nasm_result != 0)
+    std::string nasm_cmd = "nasm -f elf64 " + asm_filename + " -o " + obj_filename;
+    std::string ld_cmd = "ld " + obj_filename + " -o " + exe_filename;
+    std::string rm_cmd = "rm -f " + obj_filename + " " + asm_filename;
+    std::cout << "Executing: " << nasm_cmd << std::endl;
+    if (int nasm_result = system(nasm_cmd.c_str()); nasm_result != 0)
     {
         std::cerr << "nasm failed with error " << nasm_result << std::endl;
         return EXIT_FAILURE;
     }
 
-    std::cout << "Executing: " << ldcmd << std::endl;
-    int ld_result = system(ldcmd.c_str());
-    if (ld_result != 0)
+    std::cout << "Executing: " << ld_cmd << std::endl;
+    if (int ld_result = system(ld_cmd.c_str()); ld_result != 0)
     {
         std::cerr << "ld failed with error " << ld_result << std::endl;
         return EXIT_FAILURE;
     }
 
-    // system(rmcmd.c_str());
+    // system(rm_cmd.c_str());
     return EXIT_SUCCESS;
 }
