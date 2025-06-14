@@ -14,7 +14,7 @@ enum class TokenType
 {
     EXIT,
     INT_LIT,
-    SEMI,
+    // SEMI,
     OPEN_PAREN,
     CLOSE_PAREN,
     IDENT,
@@ -73,7 +73,6 @@ class Tokenizer
                 {
                     tokens.push_back({.type = TokenType::EXIT});
                     buf.clear();
-                    // continue;
                 }
                 else if (buf == "let")
                 {
@@ -115,7 +114,6 @@ class Tokenizer
                     case '*': type = TokenType::MULT; break;
                     case '/': type = TokenType::DIV; break;
                     case '-': type = TokenType::SUB; break;
-                    case ';': type = TokenType::SEMI; break;
                     default:
                     std::cerr << "Error: Unexpected token '" << c << "'" << std::endl;
                     exit(EXIT_FAILURE);

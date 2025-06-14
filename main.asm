@@ -70,7 +70,7 @@ _start:
 
     push QWORD [rsp + 16]
 
-    push QWORD [rsp + 16]
+    push QWORD [rsp + 32]
 
     pop rax
     pop rbx

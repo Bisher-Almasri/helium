@@ -10,7 +10,7 @@ fn greet() = log("Hello")
 fn square(x: int) -> int = x * x
 
 fn compare(a: int, b: int) -> int {
-    if a == 0 || b == 0 || (a < b && a != 0) {
+    if (a == 0 || b == 0 || (a < b && a != 0)) {
         -> 0
     }
     -> a + b
@@ -19,6 +19,7 @@ fn compare(a: int, b: int) -> int {
 fn idk(f: func<int>, v: int) -> void {
     -> f(v)
 }
+
 
 let x = 3
 let y = 5

@@ -244,7 +244,6 @@ class Parser
                 exit(EXIT_FAILURE);
             }
             tryConsume(TokenType::CLOSE_PAREN, "Error: Expected `)`");
-            tryConsume(TokenType::SEMI, "Error: Expected ';'");
 
             auto stmt = m_allocator.alloc<NodeStmt>();
             stmt->var = stmt_exit;
@@ -273,7 +272,6 @@ class Parser
                 std::cerr << "Error: Invalid Expression." << std::endl;
                 exit(EXIT_FAILURE);
             }
-            tryConsume(TokenType::SEMI, "Error: Expected ';'");
 
             auto stmt = m_allocator.alloc<NodeStmt>();
             stmt->var = stmt_let;
