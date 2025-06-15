@@ -5,8 +5,9 @@
 #pragma once
 #include "parser.hpp"
 
+#include <algorithm>
+#include <map>
 #include <sstream>
-#include <unordered_map>
 
 // YOU SHOULD NOT USE MY CODE FOR REFERENCE, I HAVE NO IDEA WHAT IM DOING
 // I'M LEARNING ASM WHILE DOING THIS, USING MY CODE IS EQUIVALENT TO DE OPTIMIZATION
@@ -33,15 +34,19 @@ class Generator
 
             void operator()(const NodeTermIdent* term_ident) const
             {
-                if (!gen->m_vars.contains(term_ident->ident.value.value()))
+                // I don't even know what I wrote. who ever designed c++ lamda's, why just why
+                const auto it =
+                    std::ranges::find_if(std::as_const(gen->m_vars), [&](const Var& var)
+                                         { return var.name == term_ident->ident.value.value(); });
+
+                if (it == gen->m_vars.cend())
                 {
                     std::cerr << "Error: Undeclared Identifier.\n";
                     exit(EXIT_FAILURE);
                 }
 
-                const auto& [stack_loc] = gen->m_vars.at(term_ident->ident.value.value());
                 std::stringstream offset;
-                offset << "QWORD [rsp + " << (gen->m_stack_size - stack_loc - 1) * 8 << "]\n";
+                offset << "QWORD [rsp + " << (gen->m_stack_size - it->stack_loc - 1) * 8 << "]\n";
                 gen->push(offset.str());
             }
 
@@ -65,50 +70,39 @@ class Generator
             {
                 gen->genExpression(bin_expr_add->rhs);
                 gen->genExpression(bin_expr_add->lhs);
-                // both are pushed to the stack
-                // add requires ax (where result will be restored, and another reg for add
                 gen->pop("rax");
                 gen->pop("rbx");
                 gen->m_output << "    add rax, rbx\n";
-                // push it to the stack so we can use it
                 gen->push("rax");
             }
+
             void operator()(const NodeBinExprMult* bin_expr_mult) const
             {
                 gen->genExpression(bin_expr_mult->rhs);
                 gen->genExpression(bin_expr_mult->lhs);
-                // both are pushed to the stack
-                // add requires ax (where result will be restored, and another reg for add
                 gen->pop("rax");
                 gen->pop("rbx");
-                // reason only rbx is it stores val into rax, so passing rac would be futile and result in an error
                 gen->m_output << "    mul rbx\n";
-                // push it to the stack so we can use it
                 gen->push("rax");
             }
+
             void operator()(const NodeBinExprSub* bin_expr_sub) const
             {
                 gen->genExpression(bin_expr_sub->rhs);
                 gen->genExpression(bin_expr_sub->lhs);
-                // both are pushed to the stack
-                // add requires ax (where result will be restored, and another reg for add
                 gen->pop("rax");
                 gen->pop("rbx");
                 gen->m_output << "    sub rax, rbx\n";
-                // push it to the stack so we can use it
                 gen->push("rax");
             }
+
             void operator()(const NodeBinExprDiv* bin_expr_div) const
             {
                 gen->genExpression(bin_expr_div->rhs);
                 gen->genExpression(bin_expr_div->lhs);
-                // both are pushed to the stack
-                // add requires ax (where result will be restored, and another reg for add
                 gen->pop("rax");
                 gen->pop("rbx");
-                // reason only rbx is it stores val into rax, so passing rac would be futile and result in an error
                 gen->m_output << "    div rbx\n";
-                // push it to the stack so we can use it
                 gen->push("rax");
             }
         };
@@ -155,14 +149,39 @@ class Generator
 
             void operator()(const NodeStmtLet* stmt_let) const
             {
-                if (gen->m_vars.contains(stmt_let->ident.value.value()))
+                const auto it =
+                    std::ranges::find_if(std::as_const(gen->m_vars), [&](const Var& var)
+                                         { return var.name == stmt_let->ident.value.value(); });
+                if (it != gen->m_vars.cend())
                 {
                     std::cerr << "Identifier has already been used.\n";
                     exit(EXIT_FAILURE);
                 }
-                gen->m_vars.insert(
-                    {stmt_let->ident.value.value(), Var{.stack_loc = gen->m_stack_size}});
+                gen->m_vars.push_back(
+                    {.name = stmt_let->ident.value.value(), .stack_loc = gen->m_stack_size});
                 gen->genExpression(stmt_let->expr);
+            }
+
+            void operator()(const NodeScope* scope) const
+            {
+                gen->begin_scope();
+                for (const NodeStmt* stmt : scope->stmts)
+                {
+                    gen->genStatement(stmt);
+                }
+                gen->end_scope();
+            }
+
+            void operator()(const NodeStmtIf* stmt_if) const
+            {
+                assert(false);
+            }
+
+            void operator()(const NodeStmtLog* stmt_log) const
+            {
+                gen->genExpression(stmt_log->expr);
+                // since now, we generate expr, var should be in rax so we can print int
+                gen->printInt();
             }
         };
 
@@ -170,9 +189,19 @@ class Generator
         std::visit(visitor, stmt->var);
     }
 
-    [[nodiscard]] std::string genProgram()
+    std::string genProgram()
     {
-        m_output << "global _start\n_start:\n";
+        m_output << "global _start\n";
+
+        m_output << "section .bss\n";
+        m_output << "buffer resb 32\n";
+
+        m_output << "section .data\n";
+        m_output << "newline db 10\n";
+
+        m_output << "section .text\n";
+
+        m_output << "_start:\n";
 
         for (const NodeStmt stmt : m_prog.stmts)
         {
@@ -182,6 +211,7 @@ class Generator
         mov("rax", "60");
         mov("rdi", "0");
         m_output << "    syscall\n";
+
         return m_output.str();
     }
 
@@ -200,22 +230,85 @@ class Generator
 
     void mov(const std::string& reg, const std::string& val)
     {
-        // OMFG AFTER DEBUGGING FOR 20 MINUTES
-        // I FORGOT A COMMA I HATE ASM I HATE ASM I HATE ASM I HATE ASM I HATE ASM I HATE ASM I HATE
-        // ASM I HATE ASM I HATE ASM I HATE ASM I HATE ASM I HATE ASM I HATE ASM I HATE ASM I HATE
-        // ASM I HATE ASM I HATE ASM I HATE ASM I HATE ASM
         m_output << "    mov " << reg << ", " << val << '\n';
-        //                                ^ MY OPP RIGHT HERE
+    }
+
+    void begin_scope()
+    {
+        m_scopes.push_back(m_vars.size());
+    }
+
+    void end_scope()
+    {
+        const size_t pop_count = m_vars.size() - m_scopes.back();
+        m_output << "    add rsp, " << pop_count * 8 << '\n';
+        m_stack_size -= pop_count;
+        for (int i = 0; i < pop_count; i++)
+        {
+            m_vars.pop_back();
+        }
+        m_scopes.pop_back();
     }
 
     struct Var
     {
+        std::string name;
         size_t stack_loc;
     };
 
-    std::unordered_map<std::string, Var> m_vars{};
+    std::vector<Var> m_vars{};
     size_t m_stack_size = 0;
+
+    std::vector<size_t> m_scopes{};
 
     std::stringstream m_output;
     const NodeProg m_prog;
+
+    void printInt()
+    {
+        // this is one hellhole of a code so let me explain it
+
+        // we init RCX to the end of hte buffer
+        m_output << "    mov rcx, buffer + 31\n";
+        // setup division stuff
+        m_output << "    mov rbx, 10\n";
+        m_output << "    mov rdx, 0\n";
+
+        // create label print_loop it will be converting int to str essentially then print it
+        m_output << ".print_loop:\n";
+        // make sure rdx 0
+        m_output << "    xor rdx, rdx\n";
+        // now we divide since we essentially keep dividing till its 0 cuz the nwe convert all to
+        // str
+        m_output << "    div rbx\n";
+        m_output << "    add rdx, '0'\n"; // make it char by adding '0' to make it ascii
+        // push to buffer
+        m_output << "    mov [rcx], dl\n";
+        // move backwards to go to next character as we started at end of buffer
+        m_output << "    dec rcx\n";
+        // sets ZF (Zero Flag) if rax == 0
+        m_output << "    test rax, rax\n";
+        // if it isn't zero repeat the loop
+        m_output << "    jnz .print_loop\n";
+
+        // so if it is zero increment to go to first char
+        m_output << "    inc rcx\n";
+
+        // gen length of string
+        m_output << "    mov rdx, buffer + 32\n";
+        m_output << "    sub rdx, rcx\n";
+
+        // syscalls
+        m_output << "    mov rax, 1\n";   // sys write
+        m_output << "    mov rdi, 1\n";   // stdout
+        m_output << "    mov rsi, rcx\n"; // string
+        m_output << "    syscall\n";
+
+        // same as up
+        m_output << "    mov rax, 1\n";
+        m_output << "    mov rdi, 1\n";
+        m_output << "    lea rsi, [rel newline]\n"; // print new line
+        m_output << "    mov rdx, 1\n";
+        m_output << "    syscall\n";
+    }
 };

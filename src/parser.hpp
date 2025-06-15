@@ -6,7 +6,7 @@
 #include "arena.hpp"
 #include "tokenization.hpp"
 
-#include <assert.h>
+#include <cassert>
 #include <memory>
 #include <variant>
 #include <vector>
@@ -73,6 +73,11 @@ struct NodeStmtExit
     NodeExpr* expr;
 };
 
+struct NodeStmtLog
+{
+    NodeExpr* expr;
+};
+
 // Node Statement Let
 struct NodeStmtLet
 {
@@ -80,10 +85,23 @@ struct NodeStmtLet
     NodeExpr* expr{};
 };
 
+struct NodeStmt;
+
+struct NodeScope
+{
+    std::vector<NodeStmt*> stmts;
+};
+
+struct NodeStmtIf
+{
+    NodeExpr* expr;
+    NodeScope* scope;
+};
+
 // Node Statement
 struct NodeStmt
 {
-    std::variant<NodeStmtExit*, NodeStmtLet*> var;
+    std::variant<NodeStmtExit*, NodeStmtLet*, NodeScope*, NodeStmtIf*, NodeStmtLog*> var;
 };
 
 // Node Program
@@ -182,7 +200,7 @@ class Parser
             const auto expr = m_allocator.alloc<NodeBinExpr>();
             const auto expr_lhs2 = m_allocator.alloc<NodeExpr>();
 
-            if (op_type == TokenType::ADD)
+            if (op_type == TokenType::PLUS)
             {
                 auto add = m_allocator.alloc<NodeBinExprAdd>();
                 expr_lhs2->var = expr_lhs->var;
@@ -190,7 +208,7 @@ class Parser
                 add->rhs = expr_rhs.value();
                 expr->var = add;
             }
-            else if (op_type == TokenType::MULT)
+            else if (op_type == TokenType::STAR)
             {
                 auto mult = m_allocator.alloc<NodeBinExprMult>();
                 expr_lhs2->var = expr_lhs->var;
@@ -198,7 +216,7 @@ class Parser
                 mult->rhs = expr_rhs.value();
                 expr->var = mult;
             }
-            else if (op_type == TokenType::SUB)
+            else if (op_type == TokenType::MINUS)
             {
                 auto sub = m_allocator.alloc<NodeBinExprSub>();
                 expr_lhs2->var = expr_lhs->var;
@@ -206,7 +224,7 @@ class Parser
                 sub->rhs = expr_rhs.value();
                 expr->var = sub;
             }
-            else if (op_type == TokenType::DIV)
+            else if (op_type == TokenType::F_SLASH)
             {
                 auto div = m_allocator.alloc<NodeBinExprDiv>();
                 expr_lhs2->var = expr_lhs->var;
@@ -227,10 +245,8 @@ class Parser
     std::optional<NodeStmt*> parseStatement()
     {
 
-        if (peek().value().type == TokenType::EXIT && peek(1).value().type == TokenType::OPEN_PAREN)
+        if (tryConsume(TokenType::EXIT) && tryConsume(TokenType::OPEN_PAREN))
         {
-            consume();
-            consume();
             // NodeStmtExit stmt_exit;
             auto stmt_exit = m_allocator.alloc<NodeStmtExit>();
 
@@ -254,11 +270,10 @@ class Parser
          * let ident = (int_lit)
          * TODO: more data types?
          */
-        else if (peek().has_value() && peek().value().type == TokenType::LET &&
-                 peek(1).has_value() && peek(1).value().type == TokenType::IDENT &&
-                 peek(2).has_value() && peek(2).value().type == TokenType::EQ)
+        else if (tryConsume(TokenType::LET) && peek().has_value() &&
+                 peek().value().type == TokenType::IDENT && peek(1).has_value() &&
+                 peek(1).value().type == TokenType::EQ)
         {
-            consume();
             // auto stmt_let = NodeStmtLet{.ident = consume()};
             auto stmt_let = m_allocator.alloc<NodeStmtLet>();
             stmt_let->ident = consume();
@@ -275,6 +290,37 @@ class Parser
 
             auto stmt = m_allocator.alloc<NodeStmt>();
             stmt->var = stmt_let;
+            return stmt;
+        }
+        else if (auto open_bracket = tryConsume(TokenType::OPEN_BRACKET))
+        {
+            const auto scope = m_allocator.alloc<NodeScope>();
+            while (auto stmt = parseStatement())
+            {
+                scope->stmts.push_back(stmt.value());
+            }
+            tryConsume(TokenType::CLOSE_BRACKET, "Error: Expected `}`");
+            auto stmt = m_allocator.alloc<NodeStmt>();
+            stmt->var = scope;
+            return stmt;
+        }
+        else if (tryConsume(TokenType::LOG) && tryConsume(TokenType::OPEN_PAREN))
+        {
+            auto stmt_log = m_allocator.alloc<NodeStmtLog>();
+
+            if (const auto node_expr = parseExpression())
+            {
+                stmt_log->expr = node_expr.value();
+            }
+            else
+            {
+                std::cerr << "Error: Invalid Expression." << std::endl;
+                exit(EXIT_FAILURE);
+            }
+            tryConsume(TokenType::CLOSE_PAREN, "Error: Expected `)`");
+
+            auto stmt = m_allocator.alloc<NodeStmt>();
+            stmt->var = stmt_log;
             return stmt;
         }
         else

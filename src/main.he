@@ -1,5 +1,11 @@
 let x = 4*3/6+3+2*6-5
 let y = 1*2*3
-let z = 2*(3-1)
 
-exit(x+y-z)
+log(5)
+
+{
+    let xz = 1
+}
+
+let xz = 2*(3-1)
+exit(x+y-xz)

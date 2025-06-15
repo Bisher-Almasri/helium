@@ -17,24 +17,28 @@ enum class TokenType
     // SEMI,
     OPEN_PAREN,
     CLOSE_PAREN,
+    OPEN_BRACKET,
+    CLOSE_BRACKET,
     IDENT,
     LET,
     EQ,
-    ADD,
-    MULT,
-    SUB,
-    DIV
+    PLUS,
+    STAR,
+    MINUS,
+    F_SLASH,
+    IF,
+    LOG
 };
 
 inline std::optional<int> BinPrec(const TokenType type)
 {
     switch (type)
     {
-    case TokenType::ADD:
-    case TokenType::SUB:
+    case TokenType::PLUS:
+    case TokenType::MINUS:
         return 1;
-    case TokenType::MULT:
-    case TokenType::DIV:
+    case TokenType::STAR:
+    case TokenType::F_SLASH:
         return 2;
     default:
         return {};
@@ -44,7 +48,7 @@ inline std::optional<int> BinPrec(const TokenType type)
 struct Token
 {
     TokenType type;
-    std::optional<std::string> value {};
+    std::optional<std::string> value{};
 };
 
 class Tokenizer
@@ -59,9 +63,11 @@ class Tokenizer
         std::vector<Token> tokens;
 
         std::string buf;
+
+        int lineCount = 1;
         while (peek().has_value())
         {
-            char c = peek().value();
+            const char c = peek().value();
             if (std::isalpha(peek().value()))
             {
                 buf.push_back(consume());
@@ -77,6 +83,16 @@ class Tokenizer
                 else if (buf == "let")
                 {
                     tokens.push_back({.type = TokenType::LET});
+                    buf.clear();
+                }
+                else if (buf == "if")
+                {
+                    tokens.push_back({.type = TokenType::IF});
+                    buf.clear();
+                }
+                else if (buf == "log")
+                {
+                    tokens.push_back({.type = TokenType::LOG});
                     buf.clear();
                 }
                 else
@@ -107,15 +123,40 @@ class Tokenizer
 
                 switch (c)
                 {
-                    case '(': type = TokenType::OPEN_PAREN; break;
-                    case ')': type = TokenType::CLOSE_PAREN; break;
-                    case '=': type = TokenType::EQ; break;
-                    case '+': type = TokenType::ADD; break;
-                    case '*': type = TokenType::MULT; break;
-                    case '/': type = TokenType::DIV; break;
-                    case '-': type = TokenType::SUB; break;
-                    default:
-                    std::cerr << "Error: Unexpected token '" << c << "'" << std::endl;
+                case '\n':
+                    lineCount++;
+                case '(':
+                    type = TokenType::OPEN_PAREN;
+                    break;
+                case ')':
+                    type = TokenType::CLOSE_PAREN;
+                    break;
+                case '{':
+                    type = TokenType::OPEN_BRACKET;
+                    break;
+                case '}':
+                    type = TokenType::CLOSE_BRACKET;
+                    break;
+                case '=':
+                    type = TokenType::EQ;
+                    break;
+                case '+':
+                    type = TokenType::PLUS;
+                    break;
+                case '*':
+                    type = TokenType::STAR;
+                    break;
+                case '/':
+                    type = TokenType::F_SLASH;
+                    break;
+                case '-':
+                    type = TokenType::MINUS;
+                    break;
+                // case ';':
+                //     type = TokenType::SEMI;
+                //     break;
+                default:
+                    std::cerr << "Error: Line " << lineCount << " Unexpected token '" << c << "'" << std::endl;
                     exit(EXIT_FAILURE);
                 }
                 tokens.push_back({.type = type});

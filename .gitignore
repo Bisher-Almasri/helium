@@ -6,3 +6,6 @@ build/
 
 main.asm
 main.o
+
+test
+test.o
