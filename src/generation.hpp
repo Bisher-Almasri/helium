@@ -15,7 +15,7 @@
 class Generator
 {
   public:
-    inline explicit Generator(NodeProg prog) : m_prog(std::move(prog))
+    explicit Generator(NodeProg prog) : m_prog(std::move(prog))
     {
     }
 
@@ -23,20 +23,20 @@ class Generator
     {
         struct ExprVisitor
         {
-            Generator* gen;
+            Generator& gen;
 
             void operator()(const NodeTerm* term) const
             {
-                gen->genTerm(term);
+                gen.genTerm(term);
             }
 
             void operator()(const NodeBinExpr* bin_expr) const
             {
-                gen->genBinExpr(bin_expr);
+                gen.genBinExpr(bin_expr);
             }
         };
 
-        ExprVisitor visitor{.gen = this};
+        ExprVisitor visitor{.gen = *this};
         std::visit(visitor, expr->var);
     }
 
@@ -44,41 +44,41 @@ class Generator
     {
         struct TermVisitor
         {
-            Generator* gen;
+            Generator& gen;
 
             void operator()(const NodeTermIntLit* term_int_lit) const
             {
-                gen->mov("rax", term_int_lit->int_lit.value.value());
-                gen->push("rax");
+                gen.mov("rax", term_int_lit->int_lit.value.value());
+                gen.push("rax");
             }
 
             void operator()(const NodeTermIdent* term_ident) const
             {
                 // I don't even know what I wrote. who ever designed c++ lamda's, why just why
                 const auto it =
-                    std::ranges::find_if(std::as_const(gen->m_vars), [&](const Var& var)
+                    std::ranges::find_if(std::as_const(gen.m_vars), [&](const Var& var)
                                          { return var.name == term_ident->ident.value.value(); });
 
-                if (it == gen->m_vars.cend())
+                if (it == gen.m_vars.cend())
                 {
                     std::cerr << "Error: Undeclared Identifier.\n";
                     exit(1);
                 }
 
                 std::stringstream offset;
-                offset << "QWORD [rsp + " << (gen->m_stack_size - it->stack_loc - 1) * 8 << "]";
+                offset << "QWORD [rsp + " << (gen.m_stack_size - it->stack_loc - 1) * 8 << "]";
 
-                gen->mov("rax", offset.str());
-                gen->push("rax");
+                gen.mov("rax", offset.str());
+                gen.push("rax");
             }
 
             void operator()(const NodeTermParen* term_paren) const
             {
-                gen->genExpression(term_paren->expr);
+                gen.genExpression(term_paren->expr);
             }
         };
 
-        TermVisitor visitor{.gen = this};
+        TermVisitor visitor{.gen = *this};
 
         std::visit(visitor, term->var);
     }
@@ -87,145 +87,166 @@ class Generator
     {
         struct BinExprVisitor
         {
-            Generator* gen;
+            Generator& gen;
 
             void operator()(const NodeBinExprAdd* bin_expr_add) const
             {
-                gen->genExpression(bin_expr_add->lhs);
-                gen->genExpression(bin_expr_add->rhs);
-                gen->pop("rbx");
-                gen->pop("rax");
-                gen->instr("add rax, rbx");
+                gen.genExpression(bin_expr_add->lhs);
+                gen.genExpression(bin_expr_add->rhs);
+                gen.pop("rbx");
+                gen.pop("rax");
+                gen.instr("add rax, rbx");
 
-                gen->push("rax");
+                gen.push("rax");
             }
 
             void operator()(const NodeBinExprMult* bin_expr_mult) const
             {
-                gen->genExpression(bin_expr_mult->lhs);
-                gen->genExpression(bin_expr_mult->rhs);
-                gen->pop("rbx"); // rhs
-                gen->pop("rax"); // lhs
-                gen->instr("imul rax, rbx");
+                gen.genExpression(bin_expr_mult->lhs);
+                gen.genExpression(bin_expr_mult->rhs);
+                gen.pop("rbx"); // rhs
+                gen.pop("rax"); // lhs
+                gen.instr("imul rax, rbx");
 
-                gen->push("rax"); // push result back
+                gen.push("rax"); // push result back
             }
 
             void operator()(const NodeBinExprSub* bin_expr_sub) const
             {
-                gen->genExpression(bin_expr_sub->lhs);
-                gen->genExpression(bin_expr_sub->rhs);
-                gen->pop("rbx"); // rhs
-                gen->pop("rax"); // lhs
-                gen->instr("sub rax, rbx");
+                gen.genExpression(bin_expr_sub->lhs);
+                gen.genExpression(bin_expr_sub->rhs);
+                gen.pop("rbx"); // rhs
+                gen.pop("rax"); // lhs
+                gen.instr("sub rax, rbx");
 
-                gen->push("rax"); // push result back
+                gen.push("rax"); // push result back
             }
 
             void operator()(const NodeBinExprDiv* bin_expr_div) const
             {
-                gen->genExpression(bin_expr_div->lhs);
-                gen->genExpression(bin_expr_div->rhs);
-                gen->pop("rbx");            // rhs
-                gen->pop("rax");            // lhs
-                gen->instr("xor rdx, rdx"); // clear rdx
-                gen->instr("div rbx");
+                gen.genExpression(bin_expr_div->lhs);
+                gen.genExpression(bin_expr_div->rhs);
+                gen.pop("rbx");            // rhs
+                gen.pop("rax");            // lhs
+                gen.instr("xor rdx, rdx"); // clear rdx
+                gen.instr("div rbx");
 
-                gen->push("rax"); // push result back
+                gen.push("rax"); // push result back
             }
         };
 
-        BinExprVisitor visitor{.gen = this};
+        BinExprVisitor visitor{.gen = *this};
 
         std::visit(visitor, bin_expr->var);
+    }
+
+    void genScope(const NodeScope* scope)
+    {
+        begin_scope();
+
+        for (const NodeStmt* s : scope->stmts)
+        {
+            genStatement(s);
+        }
+
+        end_scope();
     }
 
     void genStatement(const NodeStmt* stmt)
     {
         struct StmtVisitor
         {
-            Generator* gen;
+            Generator& gen;
 
             void operator()(const NodeStmtLet* stmt_let) const
             {
                 const auto it =
-                    std::ranges::find_if(std::as_const(gen->m_vars), [&](const Var& var)
+                    std::ranges::find_if(std::as_const(gen.m_vars), [&](const Var& var)
                                          { return var.name == stmt_let->ident.value.value(); });
 
-                if (it != gen->m_vars.cend())
+                if (it != gen.m_vars.cend())
                 {
                     std::cerr << "Error: Identifier already exists\n";
                     exit(1);
                 }
 
-                gen->genExpression(stmt_let->expr);
-                gen->m_vars.push_back({stmt_let->ident.value.value(), gen->m_stack_size - 1});
+                gen.genExpression(stmt_let->expr);
+                gen.m_vars.push_back({stmt_let->ident.value.value(), gen.m_stack_size - 1});
             }
 
             void operator()(const NodeStmtLogLn* stmt_log_ln) const
             {
-                gen->genExpression(stmt_log_ln->expr);
-                gen->pop("rax");
+                gen.genExpression(stmt_log_ln->expr);
+                gen.pop("rax");
 
-                gen->printInt(true);
+                gen.printInt(true);
             }
 
             void operator()(const NodeStmtLog* stmt_log) const
             {
-                gen->genExpression(stmt_log->expr);
-                gen->pop("rax");
+                gen.genExpression(stmt_log->expr);
+                gen.pop("rax");
 
-                gen->printInt(false);
+                gen.printInt(false);
             }
 
             void operator()(const NodeStmtExit* stmt_exit) const
             {
-                gen->genExpression(stmt_exit->expr);
-                gen->pop("rdi");
+                gen.genExpression(stmt_exit->expr);
+                gen.pop("rdi");
 
-                gen->mov("rax", "60");
+                gen.mov("rax", "60");
 
-                gen->instr("syscall");
+                gen.instr("syscall");
             }
 
             void operator()(const NodeScope* scope) const
             {
-                gen->begin_scope();
-
-                for (const NodeStmt* s : scope->stmts)
-                {
-                    gen->genStatement(s);
-                }
-
-                gen->end_scope();
+                gen.genScope(scope);
             }
 
-            void operator()(const NodeStmtIf*) const
+            void operator()(const NodeStmtIf* stmt_if) const
             {
-                assert(false);
+                // get expression
+                // for now js check if it's not zero, so text and jnz
+                gen.genExpression(stmt_if->expr);
+                gen.pop("rax"); // so now its in rax
+
+                const std::string label = ".if_true#" + std::to_string(gen.newLabelId());
+                const std::string label_done = ".if_done#" + std::to_string(gen.newLabelId());
+
+                gen.instr("test rax, rax");
+                gen.instr("jnz " + label);
+                gen.instr("jz " + label_done);
+
+                gen.createLabel(label);
+                gen.genScope(stmt_if->scope);
+
+                gen.instr("jmp " + label_done);
+                gen.createLabel(label_done);
             }
         };
 
-        StmtVisitor visitor{.gen = this};
+        StmtVisitor visitor{.gen = *this};
 
         std::visit(visitor, stmt->var);
     }
 
     std::string genProgram()
     {
-        instr("global _start");
+        instr("global _start", false);
 
-        instr("section .bss");
+        instr("section .bss", false);
 
         instr("buffer resb 32");
 
-        instr("section .data");
+        instr("section .data", false);
 
         instr("newline db 10");
 
-        instr("section .text");
+        instr("section .text", false);
 
-        instr("_start:");
+        instr("_start:", false);
         for (const NodeStmt& stmt : m_prog.stmts)
         {
             genStatement(&stmt);
@@ -239,9 +260,9 @@ class Generator
     }
 
   private:
-    void instr(const std::string& instruction)
+    void instr(const std::string& instruction, const bool indent = true)
     {
-        m_output << "    " << instruction << '\n';
+        m_output << (indent ? "    " : "") << instruction << '\n';
     }
 
     void begin_scope()
@@ -252,13 +273,19 @@ class Generator
     void end_scope()
     {
         const size_t pop_count = m_vars.size() - m_scopes.back();
-        instr("add rsp" + pop_count * 8);
+
+        if (pop_count == 0)
+            return;
+
+        instr("add rsp, " + std::to_string(pop_count * 8));
 
         m_stack_size -= pop_count;
-        for (int i = 0; i < pop_count; i++)
+
+        for (size_t i = 0; i < static_cast<int>(pop_count); i++)
         {
             m_vars.pop_back();
         }
+
         m_scopes.pop_back();
     }
 
@@ -281,7 +308,7 @@ class Generator
 
     void createLabel(const std::string& label)
     {
-        instr(label + ':');
+        instr(label + ':', false);
     }
 
     struct Var
@@ -298,12 +325,17 @@ class Generator
     std::stringstream m_output;
     const NodeProg m_prog;
 
+    int m_labelCount = 0;
+
+    int newLabelId()
+    {
+        return m_labelCount++;
+    }
+
     void printInt(const bool newLine = false)
     {
-        static int label_count = 0;
-        int id = label_count++;
-        std::string label = ".print_loop_" + std::to_string(id);
-        std::string label_done = ".print_done_" + std::to_string(id);
+        const std::string label = ".print_loop#" + std::to_string(newLabelId());
+        const std::string label_done = ".print_done#" + std::to_string(newLabelId());
 
         instr("mov rcx, buffer + 31"); // move to the last byte
         instr("mov rbx, 10");          // base 10
@@ -339,3 +371,4 @@ class Generator
         createLabel(label_done);
     }
 };
+

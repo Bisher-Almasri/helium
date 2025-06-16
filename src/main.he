@@ -1,9 +1,25 @@
 let x = 42
 let y = x+3
+let z = 0
 
+if (z) {
 
+    logln(5)
+}
+
+if (x) {
+    logln(15)
+
+}
+
+/*/
+this should get ignored
 logln(x)
 logln(y)
 logln(y+x)
+*/
+
+// so should this
 
 exit(x)
+

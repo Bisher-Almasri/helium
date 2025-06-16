@@ -9,24 +9,33 @@
 #include <string>
 #include <utility>
 #include <vector>
-
 enum class TokenType
 {
+    // KEYWORDS
     EXIT,
+    LET,
+    IF,
+    ELSE,
+    ELIF,
+
+    // IDENTIFIERS & CONSTANTS
+    IDENT,
     INT_LIT,
-    // SEMI,
+
+    // GROUPING SYMBOLS
     OPEN_PAREN,
     CLOSE_PAREN,
     OPEN_BRACKET,
     CLOSE_BRACKET,
-    IDENT,
-    LET,
+
+    // OPERATORS
     EQ,
     PLUS,
-    STAR,
     MINUS,
+    STAR,
     F_SLASH,
-    IF,
+
+    // I/O
     LOG,
     LOGLN
 };
@@ -55,11 +64,11 @@ struct Token
 class Tokenizer
 {
   public:
-    inline explicit Tokenizer(std::string src) : m_src(std::move(src))
+    explicit Tokenizer(std::string src) : m_src(std::move(src))
     {
     }
 
-    inline std::vector<Token> tokenize()
+    std::vector<Token> tokenize()
     {
         std::vector<Token> tokens;
 
@@ -101,6 +110,16 @@ class Tokenizer
                     tokens.push_back({.type = TokenType::LOG});
                     buf.clear();
                 }
+                else if (buf == "else")
+                {
+                    tokens.push_back({.type = TokenType::ELSE});
+                    buf.clear();
+                }
+                else if (buf == "elif")
+                {
+                    tokens.push_back({.type = TokenType::ELIF});
+                    buf.clear();
+                }
                 else
                 {
                     tokens.push_back({.type = TokenType::IDENT, .value = buf});
@@ -117,6 +136,30 @@ class Tokenizer
                 tokens.push_back({.type = TokenType::INT_LIT, .value = buf});
                 buf.clear();
             }
+            else if (peek().value() == '/' && peek(1).has_value() && peek(1).value() == '/')
+            {
+                while (peek().has_value() && peek().value() != '\n')
+                {
+                    consume();
+                }
+            }
+            else if (peek().value() == '/' && peek(1).has_value() && peek(1).value() == '*')
+            {
+                consume();
+                consume();
+
+                while (peek().has_value())
+                {
+                    if (peek().value() == '*' && peek(1).has_value() && peek(1).value() == '/')
+                    {
+                        consume();
+                        consume();
+                        break;
+                    }
+                    consume();
+                }
+            }
+
             else if (std::isspace(peek().value()))
             {
                 consume();
@@ -162,7 +205,8 @@ class Tokenizer
                 //     type = TokenType::SEMI;
                 //     break;
                 default:
-                    std::cerr << "Error: Line " << lineCount << " Unexpected token '" << c << "'" << std::endl;
+                    std::cerr << "Error: Line " << lineCount << " Unexpected token '" << c << "'"
+                              << std::endl;
                     exit(EXIT_FAILURE);
                 }
                 tokens.push_back({.type = type});
@@ -174,17 +218,16 @@ class Tokenizer
     }
 
   private:
-    [[nodiscard]] inline std::optional<char> peek(int offset = 0) const
+    [[nodiscard]] std::optional<char> peek(const size_t offset = 0) const
     {
         if (m_idx + offset >= m_src.length())
         {
             return {};
         }
-        else
-            return m_src.at(m_idx + offset);
+        return m_src.at(m_idx + offset);
     }
 
-    inline char consume()
+    char consume()
     {
         return m_src.at(m_idx++);
     }
