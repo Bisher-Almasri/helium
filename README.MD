@@ -55,8 +55,19 @@ make
 
 Input file (`example.he`):
 ```he
-let x = 42;
-exit(x);
+let x = 42
+let y = x+3
+
+{
+    let xy = 5
+    logln((xy*x)-5*x)
+}
+
+log(x)
+logln(y)
+logln(y+x)
+
+exit(x)
 ```
 
 Compile and run:

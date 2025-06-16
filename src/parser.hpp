@@ -78,6 +78,11 @@ struct NodeStmtLog
     NodeExpr* expr;
 };
 
+struct NodeStmtLogLn
+{
+    NodeExpr* expr;
+};
+
 // Node Statement Let
 struct NodeStmtLet
 {
@@ -101,7 +106,8 @@ struct NodeStmtIf
 // Node Statement
 struct NodeStmt
 {
-    std::variant<NodeStmtExit*, NodeStmtLet*, NodeScope*, NodeStmtIf*, NodeStmtLog*> var;
+    std::variant<NodeStmtExit*, NodeStmtLet*, NodeScope*, NodeStmtIf*, NodeStmtLog*, NodeStmtLogLn*>
+        var;
 };
 
 // Node Program
@@ -116,6 +122,20 @@ class Parser
     inline explicit Parser(std::vector<Token> tokens)
         : m_tokens(std::move(tokens)), m_allocator(1024 * 1024 * 4)
     {
+    }
+
+    std::optional<NodeScope*> parseScope()
+    {
+        if (!tryConsume(TokenType::OPEN_BRACKET).has_value())
+            return {};
+
+        auto scope = m_allocator.alloc<NodeScope>();
+        while (auto stmt = parseStatement())
+        {
+            scope->stmts.push_back(stmt.value());
+        }
+        tryConsume(TokenType::CLOSE_BRACKET, "Error: Expected `}`");
+        return scope;
     }
 
     std::optional<NodeTerm*> parseTerm()
@@ -292,17 +312,19 @@ class Parser
             stmt->var = stmt_let;
             return stmt;
         }
-        else if (auto open_bracket = tryConsume(TokenType::OPEN_BRACKET))
+        else if (peek().has_value() && peek().value().type == TokenType::OPEN_BRACKET)
         {
-            const auto scope = m_allocator.alloc<NodeScope>();
-            while (auto stmt = parseStatement())
+            if (auto scope = parseScope())
             {
-                scope->stmts.push_back(stmt.value());
+                auto stmt = m_allocator.alloc<NodeStmt>();
+                stmt->var = scope.value();
+                return stmt;
             }
-            tryConsume(TokenType::CLOSE_BRACKET, "Error: Expected `}`");
-            auto stmt = m_allocator.alloc<NodeStmt>();
-            stmt->var = scope;
-            return stmt;
+            else
+            {
+                std::cerr << "Error: Invalid Scope.\n";
+                exit(EXIT_FAILURE);
+            }
         }
         else if (tryConsume(TokenType::LOG) && tryConsume(TokenType::OPEN_PAREN))
         {
@@ -321,6 +343,55 @@ class Parser
 
             auto stmt = m_allocator.alloc<NodeStmt>();
             stmt->var = stmt_log;
+            return stmt;
+        }
+        else if (tryConsume(TokenType::LOGLN) && tryConsume(TokenType::OPEN_PAREN))
+        {
+            auto stmt_log = m_allocator.alloc<NodeStmtLogLn>();
+
+            if (const auto node_expr = parseExpression())
+            {
+                stmt_log->expr = node_expr.value();
+            }
+            else
+            {
+                std::cerr << "Error: Invalid Expression." << std::endl;
+                exit(EXIT_FAILURE);
+            }
+            tryConsume(TokenType::CLOSE_PAREN, "Error: Expected `)`");
+
+            auto stmt = m_allocator.alloc<NodeStmt>();
+            stmt->var = stmt_log;
+            return stmt;
+        }
+        else if (auto if_ = tryConsume(TokenType::IF))
+        {
+            tryConsume(TokenType::OPEN_PAREN, "Error: Expected `(`");
+            const auto stmt_if = m_allocator.alloc<NodeStmtIf>();
+            if (const auto expr = parseExpression())
+            {
+                stmt_if->expr = expr.value();
+            }
+            else
+            {
+                std::cerr << "Error: Invalid Expression." << std::endl;
+                exit(EXIT_FAILURE);
+            }
+
+            tryConsume(TokenType::CLOSE_PAREN, "Error: Expected `)`");
+
+            if (const auto scope = parseScope())
+            {
+                stmt_if->scope = scope.value();
+            }
+            else
+            {
+                std::cerr << "Error: Invalid Scope.\n";
+                exit(EXIT_FAILURE);
+            }
+
+            auto stmt = m_allocator.alloc<NodeStmt>();
+            stmt->var = stmt_if;
             return stmt;
         }
         else

@@ -27,7 +27,8 @@ enum class TokenType
     MINUS,
     F_SLASH,
     IF,
-    LOG
+    LOG,
+    LOGLN
 };
 
 inline std::optional<int> BinPrec(const TokenType type)
@@ -88,6 +89,11 @@ class Tokenizer
                 else if (buf == "if")
                 {
                     tokens.push_back({.type = TokenType::IF});
+                    buf.clear();
+                }
+                else if (buf == "logln")
+                {
+                    tokens.push_back({.type = TokenType::LOGLN});
                     buf.clear();
                 }
                 else if (buf == "log")

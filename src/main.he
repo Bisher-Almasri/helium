@@ -1,11 +1,9 @@
-let x = 4*3/6+3+2*6-5
-let y = 1*2*3
+let x = 42
+let y = x+3
 
-log(5)
 
-{
-    let xz = 1
-}
+logln(x)
+logln(y)
+logln(y+x)
 
-let xz = 2*(3-1)
-exit(x+y-xz)
+exit(x)
