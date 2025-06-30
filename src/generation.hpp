@@ -162,25 +162,78 @@ class Generator
         end_scope();
     }
 
-    void genIfPred(const NodeIfPred* if_pred)
+    llvm::BasicBlock* genIfPred(const NodeIfPred* if_pred, llvm::BasicBlock* mergeBB,
+                                llvm::Function* function, llvm::BasicBlock* currentElseBlock)
     {
-        // TODO: Implement if predicates
+        if (!if_pred)
+            return nullptr;
+
         struct IfPredVisitor
         {
             Generator& gen;
+            llvm::BasicBlock* mergeBB;
+            llvm::Function* function;
+            llvm::BasicBlock* currentElseBlock;
 
-            void operator()(const NodeIfPredElif* if_pred_elif) const
+            llvm::BasicBlock* operator()(const NodeIfPredElif* if_pred_elif) const
             {
-                // TODO: Implement elif
+                gen.m_builder->SetInsertPoint(currentElseBlock);
+
+                llvm::BasicBlock* thenBB =
+                    llvm::BasicBlock::Create(*gen.m_context, "elif.then", function);
+                llvm::BasicBlock* nextElseBB =
+                    nullptr;
+
+                if (if_pred_elif->if_pred.has_value())
+                {
+                    nextElseBB = llvm::BasicBlock::Create(*gen.m_context, "elif.else", function);
+                }
+                else
+                {
+                    nextElseBB = mergeBB;
+                }
+
+                llvm::Value* condVal = gen.genExpression(if_pred_elif->expr);
+                llvm::Value* zero =
+                    llvm::ConstantInt::get(llvm::Type::getInt64Ty(*gen.m_context), 0);
+                llvm::Value* condBool = gen.m_builder->CreateICmpNE(condVal, zero, "elifcond");
+
+                gen.m_builder->CreateCondBr(condBool, thenBB, nextElseBB);
+
+                gen.m_builder->SetInsertPoint(thenBB);
+                gen.genScope(if_pred_elif->scope);
+
+                if (!gen.m_builder->GetInsertBlock()->getTerminator())
+                {
+                    gen.m_builder->CreateBr(mergeBB);
+                }
+
+                if (if_pred_elif->if_pred.has_value())
+                {
+                    return gen.genIfPred(if_pred_elif->if_pred.value(), mergeBB, function,
+                                         nextElseBB);
+                }
+
+                return thenBB;
             }
 
-            void operator()(const NodeIfPredElse* if_pred_else) const
+            llvm::BasicBlock* operator()(const NodeIfPredElse* if_pred_else) const
             {
+                gen.m_builder->SetInsertPoint(currentElseBlock);
+                gen.genScope(if_pred_else->scope);
+                if (!gen.m_builder->GetInsertBlock()->getTerminator())
+                {
+                    gen.m_builder->CreateBr(mergeBB);
+                }
+                return currentElseBlock;
             }
         };
 
-        IfPredVisitor visitor{.gen = *this};
-        std::visit(visitor, if_pred->var);
+        IfPredVisitor visitor{.gen = *this,
+                              .mergeBB = mergeBB,
+                              .function = function,
+                              .currentElseBlock = currentElseBlock};
+        return std::visit(visitor, if_pred->var);
     }
 
     void genStatement(const NodeStmt* stmt)
@@ -260,7 +313,9 @@ class Generator
                                                       "exit", gen.m_module.get());
                 }
 
+                exitFunc->addFnAttr(llvm::Attribute::NoReturn);
                 gen.m_builder->CreateCall(exitFunc, {exitCode});
+                gen.m_builder->CreateUnreachable();
             }
 
             void operator()(const NodeScope* scope) const
@@ -270,7 +325,39 @@ class Generator
 
             void operator()(const NodeStmtIf* stmt_if) const
             {
-                // TODO: Implement if statements
+                llvm::Function* function = gen.m_builder->GetInsertBlock()->getParent();
+
+                llvm::BasicBlock* thenBB =
+                    llvm::BasicBlock::Create(*gen.m_context, "if.then", function);
+                llvm::BasicBlock* mergeBB = llvm::BasicBlock::Create(*gen.m_context, "if.cont");
+
+                llvm::Value* condVal = gen.genExpression(stmt_if->expr);
+                llvm::Value* zero =
+                    llvm::ConstantInt::get(llvm::Type::getInt64Ty(*gen.m_context), 0);
+                llvm::Value* condBool = gen.m_builder->CreateICmpNE(condVal, zero, "ifcond");
+
+                llvm::BasicBlock* elseBB = mergeBB;
+                if (stmt_if->if_pred.has_value())
+                {
+                    elseBB = llvm::BasicBlock::Create(*gen.m_context, "if.else", function);
+                }
+
+                gen.m_builder->CreateCondBr(condBool, thenBB, elseBB);
+
+                gen.m_builder->SetInsertPoint(thenBB);
+                gen.genScope(stmt_if->scope);
+
+                if (!gen.m_builder->GetInsertBlock()->getTerminator()) {
+                    gen.m_builder->CreateBr(mergeBB);
+                }
+
+                if (stmt_if->if_pred.has_value())
+                {
+                    gen.genIfPred(stmt_if->if_pred.value(), mergeBB, function, elseBB);
+                }
+
+                function->insert(function->end(), mergeBB);
+                gen.m_builder->SetInsertPoint(mergeBB);
             }
         };
 
