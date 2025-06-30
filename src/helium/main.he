@@ -1,0 +1,64 @@
+let x: int = 42
+let y: string = "hello"
+
+/*
+    multi line comment
+*/
+
+// single line
+
+println(x+42) // >> x + 42 >> 42 42 >> 84\n
+
+if (0) {
+    println("X")
+}
+elif (y) {
+    println("Y")
+}
+else {
+    println("Z")
+}
+
+{
+    let xx: int = 45
+    println(xx) // >> 45\n
+}
+
+let xx: string = "yo"
+println(xx) // >> yo\n
+
+println("hello")  // prints string with newline >> hello\n
+print("hello")    // prints string without newline >> hello
+print(42)         // prints integer without newline >> 42
+println(42)       // prints integer with newline >> 42\n
+
+x = 5
+println(x)
+
+x = 3
+
+y = "ror"
+println(y)
+
+
+if (0) {
+    println("r")
+} elif (1) {
+    println("e")
+} else {
+    println("o")
+}
+
+exit(x)
+
+// expected output
+/*
+    >> 84
+    >> Y
+    >> 45
+    >> yo
+    >> hello
+    >> hello4242
+    >> 5
+    >> ror
+    >> e

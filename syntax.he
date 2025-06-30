@@ -8,7 +8,7 @@
 use <std.io>
 use <math.utils>
 
-fn greet() = log("Hello")
+fn greet() = print("Hello, ")
 
 fn square(x: int) -> int = x * x
 
@@ -30,4 +30,4 @@ let z = compare(x, y)
 
 let message: auto = "Done"
 
-log("z = {z}, message = {message}")
+println("z = {z}, message = {message}")

@@ -6,55 +6,81 @@
 #include "parser.hpp"
 
 #include <algorithm>
+#include <llvm/IR/BasicBlock.h>
+#include <llvm/IR/Constants.h>
+#include <llvm/IR/Function.h>
+#include <llvm/IR/IRBuilder.h>
+#include <llvm/IR/LLVMContext.h>
+#include <llvm/IR/Module.h>
+#include <llvm/IR/Type.h>
+#include <llvm/IR/Value.h>
+#include <llvm/Support/raw_ostream.h>
 #include <map>
+#include <ranges>
 #include <sstream>
 
 // YOU SHOULD NOT USE MY CODE FOR REFERENCE, I HAVE NO IDEA WHAT IM DOING
-// I'M LEARNING ASM WHILE DOING THIS, USING MY CODE IS EQUIVALENT TO DE OPTIMIZATION
+// I'M LEARNING LLVM WHILE DOING THIS, USING MY CODE IS EQUIVALENT TO DE OPTIMIZATION
 
 class Generator
 {
   public:
     explicit Generator(NodeProg prog) : m_prog(std::move(prog))
     {
+        m_context = std::make_unique<llvm::LLVMContext>();
+        m_module = std::make_unique<llvm::Module>("helium", *m_context);
+        m_builder = std::make_unique<llvm::IRBuilder<>>(*m_context);
+
+        llvm::FunctionType* mainType =
+            llvm::FunctionType::get(llvm::Type::getInt32Ty(*m_context), false);
+
+        m_mainFunction = llvm::Function::Create(mainType, llvm::Function::ExternalLinkage, "main",
+                                                m_module.get());
+
+        llvm::BasicBlock* entryBlock =
+            llvm::BasicBlock::Create(*m_context, "entry", m_mainFunction);
+        m_builder->SetInsertPoint(entryBlock);
     }
 
-    void genExpression(const NodeExpr* expr)
+    llvm::Value* genExpression(const NodeExpr* expr)
     {
         struct ExprVisitor
         {
             Generator& gen;
+            llvm::Value* value;
 
-            void operator()(const NodeTerm* term) const
+            void operator()(const NodeTerm* term)
             {
-                gen.genTerm(term);
+                value = gen.genTerm(term);
             }
 
-            void operator()(const NodeBinExpr* bin_expr) const
+            void operator()(const NodeBinExpr* bin_expr)
             {
-                gen.genBinExpr(bin_expr);
+                value = gen.genBinExpr(bin_expr);
             }
         };
 
-        ExprVisitor visitor{.gen = *this};
+        ExprVisitor visitor{.gen = *this, .value = nullptr};
         std::visit(visitor, expr->var);
+        return visitor.value;
     }
 
-    void genTerm(const NodeTerm* term)
+    llvm::Value* genTerm(const NodeTerm* term)
     {
         struct TermVisitor
         {
             Generator& gen;
+            llvm::Value* value;
 
-            void operator()(const NodeTermIntLit* term_int_lit) const
+            void operator()(const NodeTermIntLit* term_int_lit)
             {
-                gen.mov("rax", term_int_lit->int_lit.value.value());
-                gen.push("rax");
+                int intV = std::stoi(term_int_lit->int_lit.value.value());
+                value = llvm::ConstantInt::get(llvm::Type::getInt64Ty(*gen.m_context), intV);
+                value = llvm::ConstantInt::get(llvm::Type::getInt64Ty(*gen.m_context), intV);
             }
 
-            void operator()(const NodeTermIdent* term_ident) const
+            void operator()(const NodeTermIdent* term_ident)
             {
-                // I don't even know what I wrote. who ever designed c++ lamda's, why just why
                 const auto it =
                     std::ranges::find_if(std::as_const(gen.m_vars), [&](const Var& var)
                                          { return var.name == term_ident->ident.value.value(); });
@@ -65,79 +91,63 @@ class Generator
                     exit(1);
                 }
 
-                std::stringstream offset;
-                offset << "QWORD [rsp + " << (gen.m_stack_size - it->stack_loc - 1) * 8 << "]";
-
-                gen.mov("rax", offset.str());
-                gen.push("rax");
+                value = gen.m_builder->CreateLoad(llvm::Type::getInt64Ty(*gen.m_context),
+                                                  it->alloca, it->name);
             }
 
-            void operator()(const NodeTermParen* term_paren) const
+            void operator()(const NodeTermParen* term_paren)
             {
-                gen.genExpression(term_paren->expr);
+                value = gen.genExpression(term_paren->expr);
+            }
+
+            void operator()(const NodeTermStringLit* string_lit)
+            {
+                // TODO: FINISH
             }
         };
 
-        TermVisitor visitor{.gen = *this};
-
+        TermVisitor visitor{.gen = *this, .value = nullptr};
         std::visit(visitor, term->var);
+        return visitor.value;
     }
 
-    void genBinExpr(const NodeBinExpr* bin_expr)
+    llvm::Value* genBinExpr(const NodeBinExpr* bin_expr)
     {
         struct BinExprVisitor
         {
             Generator& gen;
 
-            void operator()(const NodeBinExprAdd* bin_expr_add) const
+            llvm::Value* operator()(const NodeBinExprAdd* bin_expr_add) const
             {
-                gen.genExpression(bin_expr_add->lhs);
-                gen.genExpression(bin_expr_add->rhs);
-                gen.pop("rbx");
-                gen.pop("rax");
-                gen.instr("add rax, rbx");
-
-                gen.push("rax");
+                llvm::Value* LHS = gen.genExpression(bin_expr_add->lhs);
+                llvm::Value* RHS = gen.genExpression(bin_expr_add->rhs);
+                return gen.m_builder->CreateAdd(LHS, RHS, "addtmp");
             }
 
-            void operator()(const NodeBinExprMult* bin_expr_mult) const
+            llvm::Value* operator()(const NodeBinExprMult* bin_expr_mult) const
             {
-                gen.genExpression(bin_expr_mult->lhs);
-                gen.genExpression(bin_expr_mult->rhs);
-                gen.pop("rbx"); // rhs
-                gen.pop("rax"); // lhs
-                gen.instr("imul rax, rbx");
-
-                gen.push("rax"); // push result back
+                llvm::Value* LHS = gen.genExpression(bin_expr_mult->lhs);
+                llvm::Value* RHS = gen.genExpression(bin_expr_mult->rhs);
+                return gen.m_builder->CreateMul(LHS, RHS, "multmp");
             }
 
-            void operator()(const NodeBinExprSub* bin_expr_sub) const
+            llvm::Value* operator()(const NodeBinExprSub* bin_expr_sub) const
             {
-                gen.genExpression(bin_expr_sub->lhs);
-                gen.genExpression(bin_expr_sub->rhs);
-                gen.pop("rbx"); // rhs
-                gen.pop("rax"); // lhs
-                gen.instr("sub rax, rbx");
-
-                gen.push("rax"); // push result back
+                llvm::Value* LHS = gen.genExpression(bin_expr_sub->lhs);
+                llvm::Value* RHS = gen.genExpression(bin_expr_sub->rhs);
+                return gen.m_builder->CreateSub(LHS, RHS, "subtmp");
             }
 
-            void operator()(const NodeBinExprDiv* bin_expr_div) const
+            llvm::Value* operator()(const NodeBinExprDiv* bin_expr_div) const
             {
-                gen.genExpression(bin_expr_div->lhs);
-                gen.genExpression(bin_expr_div->rhs);
-                gen.pop("rbx");            // rhs
-                gen.pop("rax");            // lhs
-                gen.instr("xor rdx, rdx"); // clear rdx
-                gen.instr("div rbx");
-
-                gen.push("rax"); // push result back
+                llvm::Value* LHS = gen.genExpression(bin_expr_div->lhs);
+                llvm::Value* RHS = gen.genExpression(bin_expr_div->rhs);
+                return gen.m_builder->CreateSDiv(LHS, RHS, "divtmp");
             }
         };
 
         BinExprVisitor visitor{.gen = *this};
-
-        std::visit(visitor, bin_expr->var);
+        return std::visit(visitor, bin_expr->var);
     }
 
     void genScope(const NodeScope* scope)
@@ -150,6 +160,27 @@ class Generator
         }
 
         end_scope();
+    }
+
+    void genIfPred(const NodeIfPred* if_pred)
+    {
+        // TODO: Implement if predicates
+        struct IfPredVisitor
+        {
+            Generator& gen;
+
+            void operator()(const NodeIfPredElif* if_pred_elif) const
+            {
+                // TODO: Implement elif
+            }
+
+            void operator()(const NodeIfPredElse* if_pred_else) const
+            {
+            }
+        };
+
+        IfPredVisitor visitor{.gen = *this};
+        std::visit(visitor, if_pred->var);
     }
 
     void genStatement(const NodeStmt* stmt)
@@ -170,34 +201,66 @@ class Generator
                     exit(1);
                 }
 
-                gen.genExpression(stmt_let->expr);
-                gen.m_vars.push_back({stmt_let->ident.value.value(), gen.m_stack_size - 1});
+                llvm::Value* exprV = gen.genExpression(stmt_let->expr);
+
+                if (stmt_let->type == TokenType::INT_TYPE)
+                {
+                    llvm::AllocaInst* alloca =
+                        gen.m_builder->CreateAlloca(llvm::Type::getInt64Ty(*gen.m_context), nullptr,
+                                                    stmt_let->ident.value.value());
+
+                    gen.m_builder->CreateStore(exprV, alloca);
+
+                    gen.m_vars.push_back(
+                        {stmt_let->ident.value.value(), alloca, TokenType::INT_TYPE});
+                }
             }
 
-            void operator()(const NodeStmtLogLn* stmt_log_ln) const
+            void operator()(const NodeStmtAssign* stmt_assign) const
             {
-                gen.genExpression(stmt_log_ln->expr);
-                gen.pop("rax");
+                const auto it =
+                    std::ranges::find_if(std::as_const(gen.m_vars), [&](const Var& var)
+                                         { return var.name == stmt_assign->ident.value.value(); });
 
-                gen.printInt(true);
+                if (it == gen.m_vars.cend())
+                {
+                    std::cerr << "Error: Variable not declared: "
+                              << stmt_assign->ident.value.value() << "\n";
+                    exit(1);
+                }
+
+                llvm::Value* exprValue = gen.genExpression(stmt_assign->expr);
+
+                gen.m_builder->CreateStore(exprValue, it->alloca);
             }
 
             void operator()(const NodeStmtLog* stmt_log) const
             {
-                gen.genExpression(stmt_log->expr);
-                gen.pop("rax");
+            }
 
-                gen.printInt(false);
+            void operator()(const NodeStmtLogLn* stmt_log_ln) const
+            {
             }
 
             void operator()(const NodeStmtExit* stmt_exit) const
             {
-                gen.genExpression(stmt_exit->expr);
-                gen.pop("rdi");
+                llvm::Value* exprV = gen.genExpression(stmt_exit->expr);
 
-                gen.mov("rax", "60");
+                llvm::Value* exitCode = gen.m_builder->CreateTrunc(
+                    exprV, llvm::Type::getInt32Ty(*gen.m_context), "exitcode");
 
-                gen.instr("syscall");
+                llvm::Function* exitFunc = gen.m_module->getFunction("exit");
+                if (!exitFunc)
+                {
+                    llvm::FunctionType* exitType =
+                        llvm::FunctionType::get(llvm::Type::getVoidTy(*gen.m_context),
+                                                {llvm::Type::getInt32Ty(*gen.m_context)}, false);
+
+                    exitFunc = llvm::Function::Create(exitType, llvm::Function::ExternalLinkage,
+                                                      "exit", gen.m_module.get());
+                }
+
+                gen.m_builder->CreateCall(exitFunc, {exitCode});
             }
 
             void operator()(const NodeScope* scope) const
@@ -207,23 +270,7 @@ class Generator
 
             void operator()(const NodeStmtIf* stmt_if) const
             {
-                // get expression
-                // for now js check if it's not zero, so text and jnz
-                gen.genExpression(stmt_if->expr);
-                gen.pop("rax"); // so now its in rax
-
-                const std::string label = ".if_true#" + std::to_string(gen.newLabelId());
-                const std::string label_done = ".if_done#" + std::to_string(gen.newLabelId());
-
-                gen.instr("test rax, rax");
-                gen.instr("jnz " + label);
-                gen.instr("jz " + label_done);
-
-                gen.createLabel(label);
-                gen.genScope(stmt_if->scope);
-
-                gen.instr("jmp " + label_done);
-                gen.createLabel(label_done);
+                // TODO: Implement if statements
             }
         };
 
@@ -234,37 +281,20 @@ class Generator
 
     std::string genProgram()
     {
-        instr("global _start", false);
-
-        instr("section .bss", false);
-
-        instr("buffer resb 32");
-
-        instr("section .data", false);
-
-        instr("newline db 10");
-
-        instr("section .text", false);
-
-        instr("_start:", false);
         for (const NodeStmt& stmt : m_prog.stmts)
         {
             genStatement(&stmt);
         }
 
-        instr("mov rax, 60");
-        instr("mov rdi, 0");
-        instr("syscall");
+        m_builder->CreateRet(llvm::ConstantInt::get(llvm::Type::getInt32Ty(*m_context), 0));
 
-        return m_output.str();
+        std::string ir;
+        llvm::raw_string_ostream os(ir);
+        m_module->print(os, nullptr);
+        return ir;
     }
 
   private:
-    void instr(const std::string& instruction, const bool indent = true)
-    {
-        m_output << (indent ? "    " : "") << instruction << '\n';
-    }
-
     void begin_scope()
     {
         m_scopes.push_back(m_vars.size());
@@ -277,11 +307,7 @@ class Generator
         if (pop_count == 0)
             return;
 
-        instr("add rsp, " + std::to_string(pop_count * 8));
-
-        m_stack_size -= pop_count;
-
-        for (size_t i = 0; i < static_cast<int>(pop_count); i++)
+        for (size_t i = 0; i < pop_count; i++)
         {
             m_vars.pop_back();
         }
@@ -289,86 +315,19 @@ class Generator
         m_scopes.pop_back();
     }
 
-    void push(const std::string& reg)
-    {
-        instr("push " + reg);
-        m_stack_size++;
-    }
-
-    void pop(const std::string& reg)
-    {
-        instr("pop " + reg);
-        m_stack_size--;
-    }
-
-    void mov(const std::string& reg, const std::string& val)
-    {
-        instr("mov " + reg + ", " + val);
-    }
-
-    void createLabel(const std::string& label)
-    {
-        instr(label + ':', false);
-    }
-
     struct Var
     {
         std::string name;
-        size_t stack_loc;
+        llvm::AllocaInst* alloca;
+        TokenType type;
     };
 
     std::vector<Var> m_vars{};
-    size_t m_stack_size = 0;
-
     std::vector<size_t> m_scopes{};
-
-    std::stringstream m_output;
     const NodeProg m_prog;
 
-    int m_labelCount = 0;
-
-    int newLabelId()
-    {
-        return m_labelCount++;
-    }
-
-    void printInt(const bool newLine = false)
-    {
-        const std::string label = ".print_loop#" + std::to_string(newLabelId());
-        const std::string label_done = ".print_done#" + std::to_string(newLabelId());
-
-        instr("mov rcx, buffer + 31"); // move to the last byte
-        instr("mov rbx, 10");          // base 10
-        instr("mov rdx, 0");
-
-        createLabel(label);
-        instr("xor rdx, rdx");  // clear rdx
-        instr("div rbx");       // rax = rax / rbx
-        instr("add rdx, '0'");  // rdx = remainder + ascii '0'
-        instr("mov [rcx], dl"); // write character
-        instr("dec rcx");       // move backwards
-        instr("test rax, rax"); // if rax == 0, set zero flag aka we're done the loop
-        instr("jnz " + label);
-
-        instr("inc rcx");
-
-        instr("mov rdx, buffer + 32"); // buffer end
-        instr("sub rdx, rcx");         // length = buffer_end - rcx
-        instr("mov rax, 1");           // sys_write
-        instr("mov rdi, 1");           // fd = stdout
-        instr("mov rsi, rcx");         // buffer
-        instr("syscall");
-
-        if (newLine)
-        {
-            instr("mov rax, 1");             // sys_write
-            instr("mov rdi, 1");             // fd = stdout
-            instr("lea rsi, [rel newline]"); // buffer = newline
-            instr("mov rdx, 1");             // length = 1
-            instr("syscall");
-        }
-
-        createLabel(label_done);
-    }
+    std::unique_ptr<llvm::LLVMContext> m_context;
+    std::unique_ptr<llvm::Module> m_module;
+    std::unique_ptr<llvm::IRBuilder<>> m_builder;
+    llvm::Function* m_mainFunction;
 };
-

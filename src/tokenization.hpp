@@ -1,9 +1,9 @@
-
 //
 // Created by Bisher Almasri on 2025-06-10.
 //
 
 #pragma once
+#include <cassert>
 #include <iostream>
 #include <optional>
 #include <string>
@@ -18,15 +18,21 @@ enum class TokenType
     ELSE,
     ELIF,
 
+    // TYPES
+    INT_TYPE,
+    STRING_TYPE,
+
     // IDENTIFIERS & CONSTANTS
     IDENT,
     INT_LIT,
+    STRING_LIT,
 
     // GROUPING SYMBOLS
     OPEN_PAREN,
     CLOSE_PAREN,
     OPEN_BRACKET,
     CLOSE_BRACKET,
+    COLON,
 
     // OPERATORS
     EQ,
@@ -36,9 +42,69 @@ enum class TokenType
     F_SLASH,
 
     // I/O
-    LOG,
-    LOGLN
+    PRINT,
+    PRINTLN
 };
+
+inline std::string tokenTypeToString(const TokenType type)
+{
+    switch (type)
+    {
+    case TokenType::EXIT:
+        return "`exit`";
+
+    case TokenType::INT_LIT:
+        return "int literal";
+
+    case TokenType::STRING_LIT:
+        return "string literal";
+
+    case TokenType::OPEN_PAREN:
+        return "`(`";
+
+    case TokenType::CLOSE_PAREN:
+        return "`)`";
+
+    case TokenType::IDENT:
+        return "identifier";
+
+    case TokenType::LET:
+        return "`let`";
+
+    case TokenType::EQ:
+        return "`=`";
+
+    case TokenType::PLUS:
+        return "`+`";
+
+    case TokenType::STAR:
+        return "`*`";
+
+    case TokenType::MINUS:
+        return "`-`";
+
+    case TokenType::F_SLASH:
+        return "`/`";
+
+    case TokenType::OPEN_BRACKET:
+        return "`{`";
+
+    case TokenType::CLOSE_BRACKET:
+        return "`}`";
+
+    case TokenType::IF:
+        return "`if`";
+
+    case TokenType::ELIF:
+        return "`elif`";
+
+    case TokenType::ELSE:
+        return "`else`";
+    default:;
+    }
+
+    assert(false);
+}
 
 inline std::optional<int> BinPrec(const TokenType type)
 {
@@ -58,6 +124,7 @@ inline std::optional<int> BinPrec(const TokenType type)
 struct Token
 {
     TokenType type;
+    int line;
     std::optional<std::string> value{};
 };
 
@@ -87,42 +154,52 @@ class Tokenizer
                 }
                 if (buf == "exit")
                 {
-                    tokens.push_back({.type = TokenType::EXIT});
+                    tokens.push_back({TokenType::EXIT, lineCount});
                     buf.clear();
                 }
                 else if (buf == "let")
                 {
-                    tokens.push_back({.type = TokenType::LET});
+                    tokens.push_back({TokenType::LET, lineCount});
                     buf.clear();
                 }
                 else if (buf == "if")
                 {
-                    tokens.push_back({.type = TokenType::IF});
+                    tokens.push_back({TokenType::IF, lineCount});
                     buf.clear();
                 }
-                else if (buf == "logln")
+                else if (buf == "print")
                 {
-                    tokens.push_back({.type = TokenType::LOGLN});
+                    tokens.push_back({TokenType::PRINT, lineCount});
                     buf.clear();
                 }
-                else if (buf == "log")
+                else if (buf == "println")
                 {
-                    tokens.push_back({.type = TokenType::LOG});
+                    tokens.push_back({TokenType::PRINTLN, lineCount});
                     buf.clear();
                 }
                 else if (buf == "else")
                 {
-                    tokens.push_back({.type = TokenType::ELSE});
+                    tokens.push_back({TokenType::ELSE, lineCount});
                     buf.clear();
                 }
                 else if (buf == "elif")
                 {
-                    tokens.push_back({.type = TokenType::ELIF});
+                    tokens.push_back({TokenType::ELIF, lineCount});
+                    buf.clear();
+                }
+                else if (buf == "int")
+                {
+                    tokens.push_back({TokenType::INT_TYPE, lineCount});
+                    buf.clear();
+                }
+                else if (buf == "string")
+                {
+                    tokens.push_back({TokenType::STRING_TYPE, lineCount});
                     buf.clear();
                 }
                 else
                 {
-                    tokens.push_back({.type = TokenType::IDENT, .value = buf});
+                    tokens.push_back({TokenType::IDENT, lineCount, buf});
                     buf.clear();
                 }
             }
@@ -133,7 +210,7 @@ class Tokenizer
                 {
                     buf.push_back(consume());
                 }
-                tokens.push_back({.type = TokenType::INT_LIT, .value = buf});
+                tokens.push_back({TokenType::INT_LIT, lineCount, buf});
                 buf.clear();
             }
             else if (peek().value() == '/' && peek(1).has_value() && peek(1).value() == '/')
@@ -156,13 +233,40 @@ class Tokenizer
                         consume();
                         break;
                     }
+                    if (peek().value() == '\n')
+                    {
+                        lineCount++;
+                    }
                     consume();
                 }
             }
-
+            else if (c == '\n')
+            {
+                lineCount++;
+                consume();
+            }
             else if (std::isspace(peek().value()))
             {
                 consume();
+            }
+            else if (c == '"')
+            {
+                consume();
+                while (peek().has_value() && peek().value() != '"')
+                {
+                    buf.push_back(consume());
+                }
+                if (peek().has_value())
+                {
+                    consume();
+                    tokens.push_back({.type = TokenType::STRING_LIT, .value = buf});
+                    buf.clear();
+                }
+                else
+                {
+                    std::cerr << "Error: Unterminated string literal.\n";
+                    exit(EXIT_FAILURE);
+                }
             }
             else
             {
@@ -172,8 +276,6 @@ class Tokenizer
 
                 switch (c)
                 {
-                case '\n':
-                    lineCount++;
                 case '(':
                     type = TokenType::OPEN_PAREN;
                     break;
@@ -185,6 +287,9 @@ class Tokenizer
                     break;
                 case '}':
                     type = TokenType::CLOSE_BRACKET;
+                    break;
+                case ':':
+                    type = TokenType::COLON;
                     break;
                 case '=':
                     type = TokenType::EQ;
@@ -209,7 +314,7 @@ class Tokenizer
                               << std::endl;
                     exit(EXIT_FAILURE);
                 }
-                tokens.push_back({.type = type});
+                tokens.push_back({type, lineCount});
             }
         }
 

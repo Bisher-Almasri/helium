@@ -50,34 +50,26 @@ int main(int argc, char* argv[])
 
     Generator generator(tree.value());
 
-    std::string asm_filename = base_filename + ".asm";
+    std::string ir_filename = base_filename + ".ll";
     {
-        std::fstream file(asm_filename, std::ios::out);
+        std::fstream file(ir_filename, std::ios::out);
         if (!file.is_open())
         {
-            std::cerr << "Error: Could not create " << asm_filename << std::endl;
+            std::cerr << "Error: Could not create " << ir_filename << std::endl;
             return EXIT_FAILURE;
         }
         file << generator.genProgram();
     }
 
-    std::string obj_filename = base_filename + ".o";
     const std::string& exe_filename = base_filename;
 
-    std::string nasm_cmd = "nasm -f elf64 " + asm_filename + " -o " + obj_filename;
-    std::string ld_cmd = "ld " + obj_filename + " -o " + exe_filename;
-    std::string rm_cmd = "rm -f " + obj_filename + " " + asm_filename;
-    std::cout << "Executing: " << nasm_cmd << std::endl;
-    if (int nasm_result = system(nasm_cmd.c_str()); nasm_result != 0)
-    {
-        std::cerr << "nasm failed with error " << nasm_result << std::endl;
-        return EXIT_FAILURE;
-    }
+    std::string clang_cmd = "clang -o " + exe_filename + " " + ir_filename;
+    // std::string rm_cmd = "rm -f " + ir_filename;
 
-    std::cout << "Executing: " << ld_cmd << std::endl;
-    if (int ld_result = system(ld_cmd.c_str()); ld_result != 0)
+    std::cout << "Executing: " << clang_cmd << std::endl;
+    if (int clang_result = system(clang_cmd.c_str()); clang_result != 0)
     {
-        std::cerr << "ld failed with error " << ld_result << std::endl;
+        std::cerr << "clang failed with error " << clang_result << std::endl;
         return EXIT_FAILURE;
     }
 

@@ -4,8 +4,9 @@ cmake-*/
 build/
 .idea/
 
-main.asm
-main.o
-
-test
-test.o
+*.asm
+*.ll
+*.o
+*.s
+*.S
+test*
